@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Application.Behaviors;
 using WebAPI.Middleware;
 
@@ -23,6 +25,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddIdentity<User, Role>(options =>
 {
+    options.User.AllowedUserNameCharacters = string.Empty;
     options.Password.RequireDigit = false;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
@@ -72,9 +75,36 @@ builder.Services.AddScoped<IImportTicketService, ImportTicketService>();
 builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+builder.Services.AddScoped<IShipperService, ShipperService>();
+builder.Services.AddHttpClient<ResendEmailSender>();
+builder.Services.AddScoped<SmtpEmailSender>();
+builder.Services.AddScoped<IEmailSender>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var provider = configuration["Email:Provider"]?.Trim();
+    return provider?.Equals("Smtp", StringComparison.OrdinalIgnoreCase) == true
+        ? services.GetRequiredService<SmtpEmailSender>()
+        : services.GetRequiredService<ResendEmailSender>();
+});
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    });
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy.WithOrigins(
+                "http://localhost:5173",
+                "http://localhost:4173",
+                "http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials());
+});
 builder.Services.AddSwaggerGen(options =>
 {
     options.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
@@ -95,7 +125,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseCors("Frontend");
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 

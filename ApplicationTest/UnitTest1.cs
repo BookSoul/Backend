@@ -12,12 +12,14 @@ public class AuthValidatorTests
     {
         var validator = new RegisterUserCommandValidator();
         var command = new RegisterUserCommand(
-            new RegisterRequest(
-                FullName: "Test User",
-                Email: "invalid-email",
-                Password: "123",
-                UserName: "tester",
-                Address: "HCM"));
+            new RegisterRequest
+            {
+                FullName = "Test User",
+                Email = "invalid-email",
+                Password = "123",
+                UserName = "tester",
+                Address = "HCM"
+            });
 
         var result = validator.Validate(command);
 

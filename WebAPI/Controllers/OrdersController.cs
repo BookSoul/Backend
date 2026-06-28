@@ -21,15 +21,19 @@ public class OrdersController : ControllerBase
 
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout([FromBody] CreateOrderRequest request, CancellationToken cancellationToken)
-        => Ok(await _checkoutService.CreateOrderAsync(User.GetUserId(), request, cancellationToken));
+        => Ok(await _checkoutService.CreateOrderAsync(User.GetUserId(), request, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken));
 
     [HttpGet]
     public async Task<IActionResult> GetMyOrders(CancellationToken cancellationToken)
         => Ok(await _checkoutService.GetMyOrdersAsync(User.GetUserId(), cancellationToken));
 
     [HttpPost("{orderId:guid}/cancel")]
-    public async Task<IActionResult> Cancel(Guid orderId, CancellationToken cancellationToken)
-        => Ok(await _checkoutService.UpdateOrderStatusAsync(orderId, OrderStatus.Cancelled, cancellationToken));
+    public async Task<IActionResult> Cancel(Guid orderId, [FromBody] CancelOrderRequest request, CancellationToken cancellationToken)
+        => Ok(await _checkoutService.CancelOrderAsync(User.GetUserId(), orderId, request, cancellationToken));
+
+    [HttpPost("{orderId:guid}/return")]
+    public async Task<IActionResult> RequestReturn(Guid orderId, [FromBody] RequestReturnOrderRequest request, CancellationToken cancellationToken)
+        => Ok(await _checkoutService.RequestReturnAsync(User.GetUserId(), orderId, request, cancellationToken));
 
     [HttpPost("{orderId:guid}/reorder")]
     public async Task<IActionResult> Reorder(Guid orderId, CancellationToken cancellationToken)

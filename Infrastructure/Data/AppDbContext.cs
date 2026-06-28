@@ -21,6 +21,7 @@ public class AppDbContext : IdentityDbContext<User, Role, Guid>
 
     public DbSet<Book> Books => Set<Book>();
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Author> Authors => Set<Author>();
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<Accessory> Accessories => Set<Accessory>();
     public DbSet<AccessoryType> AccessoryTypes => Set<AccessoryType>();
@@ -41,9 +42,18 @@ public class AppDbContext : IdentityDbContext<User, Role, Guid>
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<Order>().HasKey(o => o.Id);
-        modelBuilder.Entity<OrderItem>().HasKey(oi => new { oi.OrderId, oi.BookId, oi.AccessoryId });
+        modelBuilder.Entity<Order>().Property(o => o.PaymentStatus).HasMaxLength(30);
+        modelBuilder.Entity<Order>().Property(o => o.PaymentProvider).HasMaxLength(50);
+        modelBuilder.Entity<Order>().Property(o => o.PaymentTxnRef).HasMaxLength(100);
+        modelBuilder.Entity<Order>().Property(o => o.PaymentTransactionNo).HasMaxLength(100);
+        modelBuilder.Entity<Order>().Property(o => o.PaymentResponseCode).HasMaxLength(20);
+        modelBuilder.Entity<OrderItem>().HasKey(oi => oi.Id);
         modelBuilder.Entity<ShoppingCartItem>().HasIndex(ci => new { ci.CustomerId, ci.BookId, ci.AccessoryId }).IsUnique();
         modelBuilder.Entity<WishlistItem>().HasIndex(x => new { x.CustomerId, x.BookId, x.AccessoryId }).IsUnique();
+        modelBuilder.Entity<Author>().Property(a => a.Name).HasMaxLength(200);
+        modelBuilder.Entity<Category>().Property(c => c.Name).HasMaxLength(200);
+        modelBuilder.Entity<Author>().HasIndex(a => a.Name).IsUnique();
+        modelBuilder.Entity<Category>().HasIndex(c => c.Name).IsUnique();
         modelBuilder.Entity<BuybackRequest>().HasIndex(x => x.RequestCode).IsUnique();
         modelBuilder.Entity<DonateRequest>().Property(x => x.ImageUrls).HasMaxLength(4000);
         modelBuilder.Entity<BuybackRequest>().Property(x => x.ImageUrls).HasMaxLength(4000);
@@ -63,5 +73,8 @@ public class AppDbContext : IdentityDbContext<User, Role, Guid>
         modelBuilder.Entity<OrderItem>().Property(oi => oi.Price).HasPrecision(18, 2);
         modelBuilder.Entity<BuybackRequest>().Property(r => r.ProposedPrice).HasPrecision(18, 2);
         modelBuilder.Entity<BuybackRequest>().Property(r => r.ApprovedPrice).HasPrecision(18, 2);
+        modelBuilder.Entity<BuybackRequest>().Property(r => r.OriginalPrice).HasPrecision(18, 2);
+        modelBuilder.Entity<Book>().Property(b => b.OriginalPrice).HasPrecision(18, 2);
+        modelBuilder.Entity<Accessory>().Property(a => a.OriginalPrice).HasPrecision(18, 2);
     }
 }

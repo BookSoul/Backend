@@ -12,11 +12,13 @@ public class RegisterUserHandler : IRequestHandler<RegisterUserCommand, AuthResp
 {
     private readonly UserManager<User> _userManager;
     private readonly RoleManager<Role> _roleManager;
+    private readonly IJwtTokenGenerator _jwtTokenGenerator;
 
-    public RegisterUserHandler(UserManager<User> userManager, RoleManager<Role> roleManager)
+    public RegisterUserHandler(UserManager<User> userManager, RoleManager<Role> roleManager, IJwtTokenGenerator jwtTokenGenerator)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _jwtTokenGenerator = jwtTokenGenerator;
     }
 
     public async Task<AuthResponse> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
@@ -29,12 +31,15 @@ public class RegisterUserHandler : IRequestHandler<RegisterUserCommand, AuthResp
             return new AuthResponse(false, "Email already exists");
         }
 
+        var userName = await GetAvailableUserNameAsync(request.LoginName);
+
         var user = new User
         {
-            FullName = request.FullName,
+            FullName = request.DisplayName,
             Email = request.Email,
-            UserName = request.UserName,
-            Address = request.Address
+            UserName = userName,
+            Address = request.Address,
+            PhoneNumber = request.Phone
         };
 
         var result = await _userManager.CreateAsync(user, request.Password);
@@ -49,7 +54,37 @@ public class RegisterUserHandler : IRequestHandler<RegisterUserCommand, AuthResp
             await _roleManager.CreateAsync(new Role { Name = "Customer" });
         }
         await _userManager.AddToRoleAsync(user, "Customer");
+        var roles = await _userManager.GetRolesAsync(user);
+        var token = _jwtTokenGenerator.GenerateToken(user, roles);
 
-        return new AuthResponse(true, "User registered successfully");
+        return new AuthResponse(
+            true,
+            "User registered successfully",
+            token,
+            user.FullName,
+            new UserProfileDto(
+                user.Id.ToString(),
+                user.UserName ?? user.FullName,
+                user.Email ?? request.Email,
+                user.AvatarUrl,
+                "user",
+                user.Address,
+                user.PhoneNumber,
+                user.FullName,
+                user.UserName));
+    }
+
+    private async Task<string> GetAvailableUserNameAsync(string requestedUserName)
+    {
+        var baseName = string.IsNullOrWhiteSpace(requestedUserName) ? "user" : requestedUserName.Trim();
+        var candidate = baseName;
+        var suffix = 1;
+
+        while (await _userManager.FindByNameAsync(candidate) is not null)
+        {
+            candidate = $"{baseName}{suffix++}";
+        }
+
+        return candidate;
     }
 }

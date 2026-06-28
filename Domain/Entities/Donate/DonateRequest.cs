@@ -19,6 +19,9 @@ public class DonateRequest
     public string DonorPhone { get; set; } = string.Empty;
     public string DonorAddress { get; set; } = string.Empty;
     public bool IsAnonymous { get; set; }
+    public DonateRequestStatus Status { get; set; } = DonateRequestStatus.Pending;
+    public string? StaffNote { get; set; }
+    public DateTime? ReviewedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public User Customer { get; set; } = null!;

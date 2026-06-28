@@ -23,13 +23,59 @@ public class GuestService : IGuestService
         if (minPrice.HasValue) query = query.Where(b => b.Price >= minPrice.Value);
         if (maxPrice.HasValue) query = query.Where(b => b.Price <= maxPrice.Value);
         var books = await query.ToListAsync(cancellationToken);
-        return books.Select(b => new ProductListItemDto(b.Id, ProductType.Book, b.Title, b.Price, b.Stock, b.ImageUrl, b.Category.Name, null)).ToList();
+        return books.Select(b => new ProductListItemDto(
+            b.Id,
+            "book",
+            b.Id.ToString(),
+            b.Title,
+            b.Title,
+            b.AuthorName,
+            b.AuthorName,
+            b.Price,
+            null,
+            b.Stock,
+            b.Stock > 0,
+            b.ImageUrl,
+            b.ImageUrl,
+            b.Category.Name,
+            b.Category.Name,
+            null,
+            null)).ToList();
     }
 
     public async Task<ProductDetailDto> GetBookByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var book = await _context.Books.AsNoTracking().Include(b => b.Category).FirstOrDefaultAsync(b => b.Id == id && b.IsActive, cancellationToken) ?? throw new KeyNotFoundException("Book not found.");
-        return new ProductDetailDto(book.Id, ProductType.Book, book.Title, book.Price, book.Stock, book.ImageUrl, book.IsActive, book.Description, null, book.AuthorName, book.CategoryId, book.Category.Name, null, null, null, null, book.Condition.ToString());
+        return new ProductDetailDto(
+            book.Id,
+            "book",
+            book.Title,
+            book.Title,
+            book.AuthorName,
+            book.Price,
+            book.Stock,
+            book.Stock > 0,
+            book.ImageUrl,
+            book.ImageUrl,
+            book.IsActive,
+            book.Description,
+            null,
+            book.AuthorName,
+            book.CategoryId,
+            book.Category.Name,
+            null,
+            null,
+            null,
+            null,
+            book.Condition.ToString(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "BookSoul",
+            null);
     }
 
     public async Task<IReadOnlyList<ProductListItemDto>> GetAccessoriesAsync(string? keyword, Guid? brandId, Guid? typeId, CancellationToken cancellationToken = default)
@@ -39,7 +85,24 @@ public class GuestService : IGuestService
         if (brandId.HasValue) query = query.Where(a => a.BrandId == brandId.Value);
         if (typeId.HasValue) query = query.Where(a => a.TypeId == typeId.Value);
         var items = await query.ToListAsync(cancellationToken);
-        return items.Select(a => new ProductListItemDto(a.Id, ProductType.Accessory, a.Name, a.Price, a.Stock, a.ImageUrl, null, a.Brand.Name)).ToList();
+        return items.Select(a => new ProductListItemDto(
+            a.Id,
+            "accessory",
+            a.Id.ToString(),
+            null,
+            a.Name,
+            null,
+            null,
+            a.Price,
+            null,
+            a.Stock,
+            a.Stock > 0,
+            a.ImageUrl,
+            a.ImageUrl,
+            a.Type.Name,
+            a.Type.Name,
+            a.Brand.Name,
+            a.Brand.Name)).ToList();
     }
 
     public Task<IReadOnlyList<BlindBoxTierDto>> GetBlindBoxTiersAsync(CancellationToken cancellationToken = default)
@@ -53,8 +116,8 @@ public class GuestService : IGuestService
     public async Task<IReadOnlyList<LiveSearchItemDto>> LiveSearchAsync(string keyword, CancellationToken cancellationToken = default)
     {
         keyword = keyword.Trim();
-        var books = await _context.Books.AsNoTracking().Where(b => b.IsActive && b.Title.Contains(keyword)).Select(b => new LiveSearchItemDto(b.Id, "Book", b.Title, b.AuthorName)).Take(5).ToListAsync(cancellationToken);
-        var accessories = await _context.Accessories.AsNoTracking().Where(a => a.IsActive && a.Name.Contains(keyword)).Select(a => new LiveSearchItemDto(a.Id, "Accessory", a.Name, a.Brand.Name)).Take(5).ToListAsync(cancellationToken);
+        var books = await _context.Books.AsNoTracking().Where(b => b.IsActive && b.Title.Contains(keyword)).Select(b => new LiveSearchItemDto(b.Id, "book", b.Title, b.AuthorName)).Take(5).ToListAsync(cancellationToken);
+        var accessories = await _context.Accessories.AsNoTracking().Where(a => a.IsActive && a.Name.Contains(keyword)).Select(a => new LiveSearchItemDto(a.Id, "accessory", a.Name, a.Brand.Name)).Take(5).ToListAsync(cancellationToken);
         return books.Concat(accessories).Take(5).ToList();
     }
 }

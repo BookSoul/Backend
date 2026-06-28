@@ -24,6 +24,22 @@ public class RequestsController : ControllerBase
     public async Task<IActionResult> CreateRequest(
         [FromForm] BuybackType type,
         [FromForm] decimal proposedPrice,
+        [FromForm] string? bookTitle,
+        [FromForm] string? author,
+        [FromForm] string? category,
+        [FromForm] string? condition,
+        [FromForm] string? publishYear,
+        [FromForm] string? description,
+        [FromForm] string? orderId,
+        [FromForm] string? blindBoxTier,
+        [FromForm] string? blindBoxCategory,
+        [FromForm] decimal? buybackPrice,
+        [FromForm] decimal? originalPrice,
+        [FromForm] string? reason,
+        [FromForm] string? userName,
+        [FromForm] string? userEmail,
+        [FromForm] string? userPhone,
+        [FromForm] string? userAddress,
         [FromForm] List<IFormFile>? images,
         CancellationToken cancellationToken)
     {
@@ -38,7 +54,26 @@ public class RequestsController : ControllerBase
             }
         }
 
-        var result = await _buybackService.CreateRequestAsync(User.GetUserId(), type, proposedPrice, payloads, cancellationToken);
+        var request = new CreateBuybackRequest(
+            type,
+            proposedPrice,
+            bookTitle,
+            author,
+            category,
+            condition,
+            publishYear,
+            description,
+            orderId,
+            blindBoxTier,
+            blindBoxCategory,
+            buybackPrice,
+            originalPrice,
+            reason,
+            userName,
+            userEmail,
+            userPhone,
+            userAddress);
+        var result = await _buybackService.CreateRequestAsync(User.GetUserId(), request, payloads, cancellationToken);
         return Ok(result);
     }
 
@@ -49,8 +84,16 @@ public class RequestsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet]
+    [Authorize(Roles = "Admin,Staff")]
+    public async Task<IActionResult> GetRequests(CancellationToken cancellationToken)
+    {
+        var result = await _buybackService.GetRequestsAsync(cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPatch("{id:guid}/approve")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Staff")]
     public async Task<IActionResult> ReviewRequest(Guid id, [FromBody] ApproveBuybackRequest request, CancellationToken cancellationToken)
     {
         var result = await _buybackService.ReviewRequestAsync(id, request, cancellationToken);
@@ -58,7 +101,7 @@ public class RequestsController : ControllerBase
     }
 
     [HttpGet("pending")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Staff")]
     public async Task<IActionResult> GetPending(CancellationToken cancellationToken)
     {
         var result = await _buybackService.GetPendingRequestsAsync(cancellationToken);

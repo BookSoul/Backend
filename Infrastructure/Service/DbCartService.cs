@@ -130,15 +130,52 @@ public class DbCartService : ICartService
         {
             if (ci.BookId.HasValue)
             {
-                var book = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == ci.BookId.Value, cancellationToken);
+                var book = await _context.Books.AsNoTracking()
+                    .Include(b => b.Category)
+                    .FirstOrDefaultAsync(b => b.Id == ci.BookId.Value, cancellationToken);
                 if (book is null) continue;
-                items.Add(new CartItemDto(book.Id, ProductType.Book, book.Title, ci.Quantity, book.Price, book.Price * ci.Quantity, false));
+                items.Add(new CartItemDto(
+                    book.Id,
+                    ProductType.Book,
+                    book.Title,
+                    ci.Quantity,
+                    book.Price,
+                    book.Price * ci.Quantity,
+                    false,
+                    book.Id.ToString(),
+                    "book",
+                    book.Title,
+                    book.Price,
+                    book.ImageUrl,
+                    book.AuthorName,
+                    null,
+                    book.Category?.Name,
+                    null));
             }
             else if (ci.AccessoryId.HasValue)
             {
-                var accessory = await _context.Accessories.AsNoTracking().FirstOrDefaultAsync(a => a.Id == ci.AccessoryId.Value, cancellationToken);
+                var accessory = await _context.Accessories.AsNoTracking()
+                    .Include(a => a.Brand)
+                    .Include(a => a.Type)
+                    .FirstOrDefaultAsync(a => a.Id == ci.AccessoryId.Value, cancellationToken);
                 if (accessory is null) continue;
-                items.Add(new CartItemDto(accessory.Id, ProductType.Accessory, accessory.Name, ci.Quantity, accessory.Price, accessory.Price * ci.Quantity, false));
+                items.Add(new CartItemDto(
+                    accessory.Id,
+                    ProductType.Accessory,
+                    accessory.Name,
+                    ci.Quantity,
+                    accessory.Price,
+                    accessory.Price * ci.Quantity,
+                    false,
+                    accessory.Id.ToString(),
+                    "accessory",
+                    accessory.Name,
+                    accessory.Price,
+                    accessory.ImageUrl,
+                    null,
+                    accessory.Brand?.Name,
+                    accessory.Type?.Name,
+                    null));
             }
         }
 

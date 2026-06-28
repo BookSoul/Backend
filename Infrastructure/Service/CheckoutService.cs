@@ -16,20 +16,30 @@ public class CheckoutService : ICheckoutService
     private readonly AppDbContext _context;
     private readonly ICartService _cartService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IVnPayService _vnPayService;
 
-    public CheckoutService(AppDbContext context, ICartService cartService, IUnitOfWork unitOfWork)
+    public CheckoutService(AppDbContext context, ICartService cartService, IUnitOfWork unitOfWork, IVnPayService vnPayService)
     {
         _context = context;
         _cartService = cartService;
         _unitOfWork = unitOfWork;
+        _vnPayService = vnPayService;
     }
 
-    public async Task<CheckoutResponseDto> CreateOrderAsync(Guid customerId, CreateOrderRequest request, CancellationToken cancellationToken = default)
+    public async Task<CheckoutResponseDto> CreateOrderAsync(Guid customerId, CreateOrderRequest request, string? clientIp = null, CancellationToken cancellationToken = default)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(() => CreateOrderCoreAsync(customerId, request, clientIp, cancellationToken));
+    }
+
+    private async Task<CheckoutResponseDto> CreateOrderCoreAsync(Guid customerId, CreateOrderRequest request, string? clientIp, CancellationToken cancellationToken)
     {
         var cart = await _cartService.GetCartAsync(customerId, cancellationToken);
         var blindBoxLines = request.BlindBoxLines ?? Array.Empty<BlindBoxOrderLine>();
+        var frontendItems = request.Items ?? Array.Empty<FrontendOrderItemDto>();
+        var useRequestedItems = frontendItems.Count > 0;
 
-        if (cart.Items.Count == 0 && blindBoxLines.Count == 0)
+        if (cart.Items.Count == 0 && blindBoxLines.Count == 0 && frontendItems.Count == 0)
         {
             throw new InvalidOperationException("Cart is empty.");
         }
@@ -37,7 +47,9 @@ public class CheckoutService : ICheckoutService
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
         try
         {
-            var subTotal = cart.SubTotal + blindBoxLines.Sum(x => x.UnitPrice * x.Quantity);
+            var subTotal = (useRequestedItems ? frontendItems.Sum(x => x.Price * x.Quantity) : cart.SubTotal)
+                + blindBoxLines.Sum(x => x.UnitPrice * x.Quantity)
+                + 0;
             Voucher? voucher = null;
             decimal discountAmount = 0;
             string? appliedCode = null;
@@ -62,31 +74,57 @@ public class CheckoutService : ICheckoutService
 
             var shippingFee = await GetShippingFeeAsync(cancellationToken);
             var finalTotal = Math.Max(subTotal - discountAmount, 0) + shippingFee;
+            var isVnPay = IsVnPayPayment(request.PaymentMethod);
+            VnPayPaymentUrlDto? vnPayPayment = null;
             var order = new Order
             {
                 Id = Guid.NewGuid(),
                 CustomerId = customerId,
                 OrderDate = DateTime.UtcNow,
-                ReceiverName = request.ReceiverName,
-                ReceiverPhone = request.ReceiverPhone,
-                ReceiverEmail = request.ReceiverEmail,
-                ShippingAddress = request.ShippingAddress,
-                Notes = request.Notes,
+                ReceiverName = request.ReceiverName ?? request.UserName ?? request.ShippingAddress?.Name ?? string.Empty,
+                ReceiverPhone = request.ReceiverPhone ?? request.ShippingAddress?.Phone ?? string.Empty,
+                ReceiverEmail = request.ReceiverEmail ?? request.UserEmail ?? string.Empty,
+                ShippingAddress = BuildShippingAddressText(request),
+                Notes = request.Notes ?? request.Note,
                 Status = OrderStatus.Pending,
-                PaymentMethod = request.PaymentMethod,
+                PaymentMethod = ParsePaymentMethod(request.PaymentMethod),
+                PaymentStatus = isVnPay ? "pending" : "unpaid",
+                PaymentProvider = isVnPay ? "vnpay" : null,
                 ShippingFee = shippingFee,
                 Discount = discountAmount,
                 TotalAmount = finalTotal
             };
 
-            foreach (var item in cart.Items)
+            if (isVnPay)
             {
-                await AddOrderLineFromCartAsync(order, item, cancellationToken);
+                vnPayPayment = _vnPayService.CreatePaymentUrl(
+                    order.Id,
+                    finalTotal,
+                    $"Thanh toan don hang BookSoul {order.Id:N}",
+                    clientIp ?? "127.0.0.1",
+                    cancellationToken);
+                order.PaymentTxnRef = vnPayPayment.TxnRef;
+            }
+
+            if (!useRequestedItems)
+            {
+                foreach (var item in cart.Items)
+                {
+                    await AddOrderLineFromCartAsync(order, item, cancellationToken);
+                }
+            }
+
+            if (useRequestedItems)
+            {
+                foreach (var item in frontendItems)
+                {
+                    await AddOrderLineFromFrontendAsync(order, item, cancellationToken);
+                }
             }
 
             foreach (var blind in blindBoxLines)
             {
-                var pickedBook = await PickRandomBlindBoxBookAsync(cancellationToken);
+                var pickedBook = await PickRandomBlindBoxBookAsync(null, cancellationToken);
                 if (pickedBook is null)
                 {
                     throw new InvalidOperationException("No eligible book available for blind box.");
@@ -100,11 +138,15 @@ public class CheckoutService : ICheckoutService
                 pickedBook.Stock -= blind.Quantity;
                 order.OrderItems.Add(new OrderItem
                 {
+                    Id = Guid.NewGuid(),
                     OrderId = order.Id,
                     BookId = pickedBook.Id,
                     AccessoryId = null,
                     BlindBoxTier = BlindBoxTier.Normal,
                     BlindBoxGenre = pickedBook.Category?.Name,
+                    ProductName = "Blind Box",
+                    ProductTypeText = "blindbox",
+                    Category = pickedBook.Category?.Name,
                     Price = blind.UnitPrice,
                     Quantity = blind.Quantity
                 });
@@ -113,7 +155,28 @@ public class CheckoutService : ICheckoutService
             _context.Orders.Add(order);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             await _unitOfWork.CommitTransactionAsync(cancellationToken);
-            await _cartService.ClearCartAsync(customerId, cancellationToken);
+            try
+            {
+                if (!isVnPay && useRequestedItems)
+                {
+                    foreach (var item in frontendItems)
+                    {
+                        if (!Guid.TryParse(item.Id, out var productId)) continue;
+                        var productType = (item.Type ?? "book").Trim().Equals("accessory", StringComparison.OrdinalIgnoreCase)
+                            ? ProductType.Accessory
+                            : ProductType.Book;
+                        await _cartService.RemoveItemAsync(customerId, productId, productType, cancellationToken);
+                    }
+                }
+                else if (!isVnPay)
+                {
+                    await _cartService.ClearCartAsync(customerId, cancellationToken);
+                }
+            }
+            catch
+            {
+                // Checkout already succeeded; cart cleanup can be retried by the client.
+            }
 
             return new CheckoutResponseDto(
                 order.Id,
@@ -121,8 +184,12 @@ public class CheckoutService : ICheckoutService
                 shippingFee,
                 discountAmount,
                 finalTotal,
-                order.Status.ToString(),
-                appliedCode);
+                ToFrontendStatus(order.Status),
+                appliedCode,
+                vnPayPayment?.PaymentUrl,
+                order.PaymentStatus,
+                order.PaymentProvider,
+                order.PaymentTxnRef);
         }
         catch
         {
@@ -146,11 +213,16 @@ public class CheckoutService : ICheckoutService
             book.Stock -= item.Quantity;
             order.OrderItems.Add(new OrderItem
             {
+                Id = Guid.NewGuid(),
                 OrderId = order.Id,
                 BookId = book.Id,
                 AccessoryId = null,
                 Quantity = item.Quantity,
                 Price = book.Price,
+                ProductName = book.Title,
+                ProductImage = book.ImageUrl,
+                ProductTypeText = "book",
+                Author = book.AuthorName,
                 BlindBoxTier = null,
                 BlindBoxGenre = null
             });
@@ -168,15 +240,121 @@ public class CheckoutService : ICheckoutService
             accessory.Stock -= item.Quantity;
             order.OrderItems.Add(new OrderItem
             {
+                Id = Guid.NewGuid(),
                 OrderId = order.Id,
                 BookId = null,
                 AccessoryId = accessory.Id,
                 Quantity = item.Quantity,
                 Price = accessory.Price,
+                ProductName = accessory.Name,
+                ProductImage = accessory.ImageUrl,
+                ProductTypeText = "accessory",
                 BlindBoxTier = null,
                 BlindBoxGenre = null
             });
         }
+    }
+
+    private async Task AddOrderLineFromFrontendAsync(Order order, FrontendOrderItemDto item, CancellationToken cancellationToken)
+    {
+        var type = (item.Type ?? "book").Trim().ToLowerInvariant();
+        var quantity = item.Quantity <= 0 ? 1 : item.Quantity;
+        var name = item.Title ?? item.Name ?? "Sản phẩm";
+
+        if (type == "blindbox")
+        {
+            var selectedBook = await PickRandomBlindBoxBookAsync(item.Category, cancellationToken);
+            if (selectedBook is null)
+            {
+                throw new InvalidOperationException("No eligible book available for blind box.");
+            }
+
+            if (selectedBook.Stock < quantity)
+            {
+                throw new InvalidOperationException("Not enough stock for blind box assignment.");
+            }
+
+            selectedBook.Stock -= quantity;
+
+            order.OrderItems.Add(new OrderItem
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                BookId = selectedBook.Id,
+                AccessoryId = null,
+                BlindBoxTier = ParseBlindBoxTier(item.Tier),
+                BlindBoxGenre = item.Category ?? selectedBook.Category?.Name,
+                ProductName = name,
+                ProductImage = item.Image,
+                ProductTypeText = "blindbox",
+                Category = item.Category ?? selectedBook.Category?.Name,
+                Price = item.Price,
+                Quantity = quantity
+            });
+            return;
+        }
+
+        if (Guid.TryParse(item.Id, out var productId))
+        {
+            if (type == "accessory")
+            {
+                var accessory = await _context.Accessories.FirstOrDefaultAsync(a => a.Id == productId, cancellationToken);
+                if (accessory is not null)
+                {
+                    if (accessory.Stock < quantity) throw new InvalidOperationException($"Not enough stock for '{accessory.Name}'.");
+                    accessory.Stock -= quantity;
+                    order.OrderItems.Add(new OrderItem
+                    {
+                        Id = Guid.NewGuid(),
+                        OrderId = order.Id,
+                        AccessoryId = accessory.Id,
+                        ProductName = accessory.Name,
+                        ProductImage = accessory.ImageUrl,
+                        ProductTypeText = "accessory",
+                        Brand = item.Brand,
+                        Category = item.Category,
+                        Price = accessory.Price,
+                        Quantity = quantity
+                    });
+                    return;
+                }
+            }
+
+            var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == productId, cancellationToken);
+            if (book is not null)
+            {
+                if (book.Stock < quantity) throw new InvalidOperationException($"Not enough stock for '{book.Title}'.");
+                book.Stock -= quantity;
+                order.OrderItems.Add(new OrderItem
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = order.Id,
+                    BookId = book.Id,
+                    ProductName = book.Title,
+                    ProductImage = book.ImageUrl,
+                    ProductTypeText = "book",
+                    Author = book.AuthorName,
+                    Category = item.Category,
+                    Price = book.Price,
+                    Quantity = quantity
+                });
+                return;
+            }
+        }
+
+        order.OrderItems.Add(new OrderItem
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            ProductName = name,
+            ProductImage = item.Image,
+            ProductTypeText = type,
+            Author = item.Author,
+            Brand = item.Brand,
+            Category = item.Category,
+            Price = item.Price,
+            Quantity = quantity
+        });
     }
 
     public async Task<IReadOnlyList<OrderSummaryDto>> GetMyOrdersAsync(Guid customerId, CancellationToken cancellationToken = default)
@@ -208,12 +386,64 @@ public class CheckoutService : ICheckoutService
         var order = await _context.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw new KeyNotFoundException("Order not found.");
 
-        if (status == OrderStatus.Cancelled && order.Status != OrderStatus.Pending)
+        if (status == OrderStatus.Cancelled && !CanCustomerCancel(order.Status))
         {
-            throw new InvalidOperationException("Only pending orders can be cancelled.");
+            throw new InvalidOperationException("Only orders before waiting for delivery can be cancelled.");
         }
 
         order.Status = status;
+        await _context.SaveChangesAsync(cancellationToken);
+        return MapOrder(order);
+    }
+
+    public async Task<OrderSummaryDto> CancelOrderAsync(Guid customerId, Guid orderId, CancelOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        var order = await _context.Orders
+            .Include(o => o.OrderItems)
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.CustomerId == customerId, cancellationToken)
+            ?? throw new KeyNotFoundException("Order not found.");
+
+        if (!CanCustomerCancel(order.Status))
+        {
+            throw new InvalidOperationException("Only orders before waiting for delivery can be cancelled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw new InvalidOperationException("Cancellation reason is required.");
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        order.CancellationReason = request.Reason.Trim();
+        order.CancelledAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        return MapOrder(order);
+    }
+
+    public async Task<OrderSummaryDto> RequestReturnAsync(Guid customerId, Guid orderId, RequestReturnOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        var order = await _context.Orders
+            .Include(o => o.OrderItems)
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.CustomerId == customerId, cancellationToken)
+            ?? throw new KeyNotFoundException("Order not found.");
+
+        if (order.Status != OrderStatus.Delivered && order.Status != OrderStatus.ReturnRejected)
+        {
+            throw new InvalidOperationException("Only delivered orders can be returned.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw new InvalidOperationException("Return reason is required.");
+        }
+
+        order.Status = OrderStatus.ReturnRequested;
+        order.ReturnReason = request.Reason.Trim();
+        order.ReturnReasonDetail = string.IsNullOrWhiteSpace(request.Detail) ? null : request.Detail.Trim();
+        order.ReturnReviewNote = null;
+        order.ReturnRequestedAt = DateTime.UtcNow;
+        order.ReturnReviewedAt = null;
+
         await _context.SaveChangesAsync(cancellationToken);
         return MapOrder(order);
     }
@@ -234,13 +464,17 @@ public class CheckoutService : ICheckoutService
             {
                 var book = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
                 if (book is null) continue;
-                cartItems.Add(new CartItemDto(book.Id, ProductType.Book, book.Title, item.Quantity, book.Price, book.Price * item.Quantity, false));
+                cartItems.Add(new CartItemDto(
+                    book.Id, ProductType.Book, book.Title, item.Quantity, book.Price, book.Price * item.Quantity, false,
+                    book.Id.ToString(), "book", book.Title, book.Price, book.ImageUrl, book.AuthorName, null, null, null));
             }
             else if (item.AccessoryId.HasValue)
             {
                 var accessory = await _context.Accessories.AsNoTracking().FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
                 if (accessory is null) continue;
-                cartItems.Add(new CartItemDto(accessory.Id, ProductType.Accessory, accessory.Name, item.Quantity, accessory.Price, accessory.Price * item.Quantity, false));
+                cartItems.Add(new CartItemDto(
+                    accessory.Id, ProductType.Accessory, accessory.Name, item.Quantity, accessory.Price, accessory.Price * item.Quantity, false,
+                    accessory.Id.ToString(), "accessory", accessory.Name, accessory.Price, accessory.ImageUrl, null, null, null, null));
             }
         }
 
@@ -255,15 +489,30 @@ public class CheckoutService : ICheckoutService
     public Task<OrderSummaryDto> AssignBlindBoxProductAsync(Guid orderId, AssignBlindBoxProductRequest request, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Blind box assignment is handled automatically during checkout in the current domain model.");
 
-    private async Task<Book?> PickRandomBlindBoxBookAsync(CancellationToken cancellationToken)
+    private async Task<Book?> PickRandomBlindBoxBookAsync(string? preferredCategory, CancellationToken cancellationToken)
     {
         var books = await _context.Books
             .Include(b => b.Category)
             .Where(b => b.IsActive && b.Stock > 0)
-            .OrderBy(b => Guid.NewGuid())
             .ToListAsync(cancellationToken);
 
-        return books.FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(preferredCategory))
+        {
+            var normalized = preferredCategory.Trim();
+            var matchedBooks = books
+                .Where(book => !string.IsNullOrWhiteSpace(book.Category?.Name)
+                    && (book.Category.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase)
+                        || normalized.Contains(book.Category.Name, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(_ => Guid.NewGuid())
+                .ToList();
+
+            if (matchedBooks.Count > 0)
+            {
+                return matchedBooks.First();
+            }
+        }
+
+        return books.OrderBy(_ => Guid.NewGuid()).FirstOrDefault();
     }
 
     private async Task<decimal> GetShippingFeeAsync(CancellationToken cancellationToken)
@@ -276,13 +525,113 @@ public class CheckoutService : ICheckoutService
         order.Id,
         order.OrderDate,
         order.TotalAmount,
-        order.Status.ToString(),
-        order.PaymentMethod.ToString(),
+        ToFrontendStatus(order.Status),
+        ToFrontendPaymentMethod(order),
         order.OrderItems.Select(oi => new OrderItemDto(
             oi.BookId ?? oi.AccessoryId,
             oi.BookId.HasValue ? ProductType.Book : ProductType.Accessory,
-            oi.BlindBoxGenre ?? (oi.BookId.HasValue ? "Book" : "Accessory"),
+            oi.ProductName ?? oi.BlindBoxGenre ?? (oi.BookId.HasValue ? "Book" : "Accessory"),
             oi.Quantity,
             oi.Price,
-            oi.BlindBoxTier.HasValue)).ToList());
+            oi.BlindBoxTier.HasValue,
+            (oi.BookId ?? oi.AccessoryId)?.ToString(),
+            oi.ProductTypeText ?? (oi.BlindBoxTier.HasValue ? "blindbox" : oi.BookId.HasValue ? "book" : "accessory"),
+            oi.ProductName ?? oi.BlindBoxGenre ?? (oi.BookId.HasValue ? "Book" : "Accessory"),
+            oi.Price,
+            oi.ProductImage,
+            oi.Author,
+            oi.Brand,
+            oi.Category ?? oi.BlindBoxGenre,
+            oi.BlindBoxTier?.ToString())).ToList(),
+        order.CustomerId.ToString(),
+        order.ReceiverName,
+        order.ReceiverEmail,
+        order.OrderDate.ToString("O"),
+        order.TotalAmount,
+        new ShippingAddressDto(order.ReceiverName, order.ReceiverPhone, order.ShippingAddress, string.Empty),
+        order.CancellationReason,
+        order.CancelledAt,
+        order.ReturnReason,
+        order.ReturnReasonDetail,
+        order.ReturnReviewNote,
+        order.ReturnRequestedAt,
+        order.ReturnReviewedAt,
+        order.PaymentStatus,
+        order.PaymentProvider,
+        order.PaymentTxnRef,
+        order.PaymentTransactionNo,
+        order.PaymentResponseCode,
+        order.PaidAt);
+
+    private static string BuildShippingAddressText(CreateOrderRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ShippingAddressText)) return request.ShippingAddressText;
+        if (request.ShippingAddress is null) return string.Empty;
+        var parts = new[] { request.ShippingAddress.Address, request.ShippingAddress.City }
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+        return string.Join(", ", parts);
+    }
+
+    private static PaymentMethod ParsePaymentMethod(string? paymentMethod)
+    {
+        if (string.IsNullOrWhiteSpace(paymentMethod)) return PaymentMethod.CashOnDelivery;
+        var normalized = paymentMethod.Trim().ToLowerInvariant();
+        if (normalized.Contains("vnpay") || normalized.Contains("vn pay"))
+            return PaymentMethod.EWallet;
+        if (normalized.Contains("transfer") || normalized.Contains("khoản") || normalized.Contains("khoan") || normalized.Contains("bank"))
+            return PaymentMethod.BankTransfer;
+        if (normalized.Contains("wallet") || normalized.Contains("ví") || normalized.Contains("vi"))
+            return PaymentMethod.EWallet;
+        return PaymentMethod.CashOnDelivery;
+    }
+
+    private static bool IsVnPayPayment(string? paymentMethod)
+    {
+        if (string.IsNullOrWhiteSpace(paymentMethod)) return false;
+        var normalized = paymentMethod.Trim().ToLowerInvariant();
+        return normalized.Contains("vnpay") || normalized.Contains("vn pay");
+    }
+
+    private static BlindBoxTier? ParseBlindBoxTier(string? tier)
+    {
+        if (string.IsNullOrWhiteSpace(tier)) return BlindBoxTier.Normal;
+        var normalized = tier.Trim().ToLowerInvariant();
+        if (normalized.Contains("deluxe")) return BlindBoxTier.Deluxe;
+        if (normalized.Contains("pro")) return BlindBoxTier.Pro;
+        return BlindBoxTier.Normal;
+    }
+
+    private static bool CanCustomerCancel(OrderStatus status) => (int)status is 0 or 1;
+
+    private static string ToFrontendStatus(OrderStatus status) => (int)status switch
+    {
+        0 => "pending",
+        1 => "awaitingPreparation",
+        2 => "readyForDelivery",
+        3 => "readyForDelivery",
+        4 => "delivered",
+        5 => "cancelled",
+        6 => "returnRequested",
+        7 => "returned",
+        8 => "returnRejected",
+        _ => status.ToString().ToLowerInvariant()
+    };
+
+    private static string ToFrontendPaymentMethod(Order order)
+    {
+        if (order.PaymentProvider?.Equals("vnpay", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return "VNPay";
+        }
+
+        return ToFrontendPaymentMethod(order.PaymentMethod);
+    }
+
+    private static string ToFrontendPaymentMethod(PaymentMethod method) => method switch
+    {
+        PaymentMethod.CashOnDelivery => "Thanh toán khi nhận hàng",
+        PaymentMethod.BankTransfer => "Chuyển khoản ngân hàng",
+        PaymentMethod.EWallet => "Ví điện tử",
+        _ => method.ToString()
+    };
 }

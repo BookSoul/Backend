@@ -24,13 +24,53 @@ public class WishlistService : IWishlistService
         {
             if (item.BookId.HasValue)
             {
-                var book = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
-                if (book is not null) result.Add(new ProductListItemDto(book.Id, ProductType.Book, book.Title, book.Price, book.Stock, book.ImageUrl, null, null));
+                var book = await _context.Books.AsNoTracking().Include(b => b.Category).FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
+                if (book is not null)
+                {
+                    result.Add(new ProductListItemDto(
+                        book.Id,
+                        "book",
+                        book.Id.ToString(),
+                        book.Title,
+                        book.Title,
+                        book.AuthorName,
+                        book.AuthorName,
+                        book.Price,
+                        null,
+                        book.Stock,
+                        book.Stock > 0,
+                        book.ImageUrl,
+                        book.ImageUrl,
+                        book.Category?.Name,
+                        book.Category?.Name,
+                        null,
+                        null));
+                }
             }
             else if (item.AccessoryId.HasValue)
             {
-                var accessory = await _context.Accessories.AsNoTracking().FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
-                if (accessory is not null) result.Add(new ProductListItemDto(accessory.Id, ProductType.Accessory, accessory.Name, accessory.Price, accessory.Stock, accessory.ImageUrl, null, null));
+                var accessory = await _context.Accessories.AsNoTracking().Include(a => a.Brand).Include(a => a.Type).FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
+                if (accessory is not null)
+                {
+                    result.Add(new ProductListItemDto(
+                        accessory.Id,
+                        "accessory",
+                        accessory.Id.ToString(),
+                        null,
+                        accessory.Name,
+                        null,
+                        null,
+                        accessory.Price,
+                        null,
+                        accessory.Stock,
+                        accessory.Stock > 0,
+                        accessory.ImageUrl,
+                        accessory.ImageUrl,
+                        accessory.Type?.Name,
+                        accessory.Type?.Name,
+                        accessory.Brand?.Name,
+                        accessory.Brand?.Name));
+                }
             }
         }
         return result;

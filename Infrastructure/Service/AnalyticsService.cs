@@ -24,17 +24,17 @@ public class AnalyticsService : IAnalyticsService
             .Where(o => o.OrderDate >= start && o.OrderDate <= end);
 
         var totalRevenue = await ordersQuery
-            .Where(o => o.Status != OrderStatus.Cancelled)
+            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned)
             .SumAsync(o => o.TotalAmount, cancellationToken);
 
         var totalOrders = await ordersQuery.CountAsync(cancellationToken);
-        var pendingOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Processing, cancellationToken);
+        var pendingOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.AwaitingPreparation || o.Status == OrderStatus.ReadyForDelivery, cancellationToken);
         var pendingImportTickets = await _context.ImportTickets.CountAsync(
             t => t.Status == ImportTicketStatus.Pending && t.SubmittedAt != null, cancellationToken);
         var pendingBuyback = await _context.BuybackRequests.CountAsync(r => r.Status == BuybackRequestStatus.Pending, cancellationToken);
 
         var revenueByMonth = await ordersQuery
-            .Where(o => o.Status != OrderStatus.Cancelled)
+            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned)
             .GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month })
             .Select(g => new MonthlyRevenueDto(g.Key.Year, g.Key.Month, g.Sum(x => x.TotalAmount)))
             .OrderBy(x => x.Year)

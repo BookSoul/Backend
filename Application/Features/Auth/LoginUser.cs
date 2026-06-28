@@ -31,7 +31,28 @@ public class LoginUserHandler : IRequestHandler<LoginUserQuery, AuthResponse>
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = _jwtTokenGenerator.GenerateToken(user, roles);
+        var role = roles.Contains("Admin")
+            ? "admin"
+            : roles.Contains("Shipper")
+                ? "shipper"
+                : roles.Contains("Staff")
+                    ? "staff"
+                    : "user";
 
-        return new AuthResponse(true, "Login successful", token, user.FullName);
+        return new AuthResponse(
+            true,
+            "Login successful",
+            token,
+            user.FullName,
+            new UserProfileDto(
+                user.Id.ToString(),
+                user.UserName ?? user.FullName,
+                user.Email ?? request.Email,
+                user.AvatarUrl,
+                role,
+                user.Address,
+                user.PhoneNumber,
+                user.FullName,
+                user.UserName));
     }
 }

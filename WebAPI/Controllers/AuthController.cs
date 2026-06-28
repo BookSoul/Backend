@@ -39,4 +39,28 @@ public class AuthController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ForgotPasswordCommand(request), cancellationToken);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ResetForgotPasswordCommand(request), cancellationToken);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
 }

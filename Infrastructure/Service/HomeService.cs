@@ -24,7 +24,23 @@ public class HomeService : IHomeService
             .OrderByDescending(b => b.Stock)
             .Take(8)
             .Select(b => new ProductListItemDto(
-                b.Id, ProductType.Book, b.Title, b.Price, b.Stock, b.ImageUrl, b.Category.Name, null))
+                b.Id,
+                "book",
+                b.Id.ToString(),
+                b.Title,
+                b.Title,
+                b.AuthorName,
+                b.AuthorName,
+                b.Price,
+                null,
+                b.Stock,
+                b.Stock > 0,
+                b.ImageUrl,
+                b.ImageUrl,
+                b.Category.Name,
+                b.Category.Name,
+                null,
+                null))
             .ToListAsync(cancellationToken);
 
         var accessories = await _context.Accessories
@@ -34,7 +50,23 @@ public class HomeService : IHomeService
             .OrderByDescending(a => a.Stock)
             .Take(8)
             .Select(a => new ProductListItemDto(
-                a.Id, ProductType.Accessory, a.Name, a.Price, a.Stock, a.ImageUrl, null, a.Brand.Name))
+                a.Id,
+                "accessory",
+                a.Id.ToString(),
+                null,
+                a.Name,
+                null,
+                null,
+                a.Price,
+                null,
+                a.Stock,
+                a.Stock > 0,
+                a.ImageUrl,
+                a.ImageUrl,
+                null,
+                null,
+                a.Brand.Name,
+                a.Brand.Name))
             .ToListAsync(cancellationToken);
 
         var banners = await _context.Banners

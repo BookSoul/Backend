@@ -27,12 +27,25 @@ public record UpdateReviewRequest(
 public record DonateRequestDto(
     Guid Id,
     Guid CustomerId,
+    string UserId,
     string BookTitle,
     string Author,
     string Genre,
     BookCondition Condition,
+    string ConditionText,
+    IReadOnlyList<string> ImageUrls,
     DonateCardTemplate CardTemplate,
+    string CardTemplateKey,
+    string MessageContent,
+    string DonorName,
+    string DonorEmail,
+    string DonorPhone,
+    string DonorAddress,
     bool IsAnonymous,
+    DonateRequestStatus Status,
+    string StatusKey,
+    string? StaffNote,
+    DateTime? ReviewedAt,
     DateTime CreatedAt
 );
 
@@ -49,4 +62,9 @@ public record CreateDonateRequest(
     string DonorPhone,
     string DonorAddress,
     bool IsAnonymous
+);
+
+public record ReviewDonateRequest(
+    DonateRequestStatus Status,
+    string? StaffNote
 );
