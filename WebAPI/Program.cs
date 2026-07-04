@@ -22,6 +22,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sqlOptions => sqlOptions.EnableRetryOnFailure()
     ));
+builder.Services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
 
 builder.Services.AddIdentity<User, Role>(options =>
 {
@@ -76,16 +77,18 @@ builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IShipperService, ShipperService>();
-builder.Services.AddHttpClient<ResendEmailSender>();
-builder.Services.AddScoped<SmtpEmailSender>();
+builder.Services.AddScoped<IVnPayService, VnPayService>();
+builder.Services.AddScoped<MailKitEmailSender>();
 builder.Services.AddScoped<IEmailSender>(services =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
     var provider = configuration["Email:Provider"]?.Trim();
-    return provider?.Equals("Smtp", StringComparison.OrdinalIgnoreCase) == true
-        ? services.GetRequiredService<SmtpEmailSender>()
-        : services.GetRequiredService<ResendEmailSender>();
+    return provider?.Equals("MailKit", StringComparison.OrdinalIgnoreCase) == true
+        ? services.GetRequiredService<MailKitEmailSender>()
+        : services.GetRequiredService<SmtpEmailSender>(); // Fallback to old Smtp if needed, or we can just always use MailKit. Let's just use MailKit if configured.
 });
+
+builder.Services.AddScoped<IPayOSService, PayOSService>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -108,6 +111,31 @@ builder.Services.AddCors(options =>
 builder.Services.AddSwaggerGen(options =>
 {
     options.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
+    
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Nhập token JWT của bạn vào đây (chỉ cần paste token, không cần chữ Bearer)."
+    });
+
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
 
 var app = builder.Build();

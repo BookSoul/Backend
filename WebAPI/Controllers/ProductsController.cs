@@ -11,10 +11,12 @@ namespace WebAPI.Controllers;
 public class ProductsController : ControllerBase
 {
     private readonly IProductService _productService;
+    private readonly IImageStorageService _imageStorageService;
 
-    public ProductsController(IProductService productService)
+    public ProductsController(IProductService productService, IImageStorageService imageStorageService)
     {
         _productService = productService;
+        _imageStorageService = imageStorageService;
     }
 
     [HttpGet]
@@ -42,22 +44,39 @@ public class ProductsController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Staff,Admin")]
-    public async Task<IActionResult> CreateProduct([FromBody] CreateProductRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateProduct([FromForm] CreateProductRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
     {
+        string? url = null;
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+        }
+
         if (request.Type == ProductType.Book)
         {
+            if (request.Book != null && url != null) request.Book.ImageUrl = url;
             var book = await _productService.CreateBookAsync(request.Book!, cancellationToken);
             return Ok(book);
         }
 
+        if (request.Accessory != null && url != null) request.Accessory.ImageUrl = url;
         var accessory = await _productService.CreateAccessoryAsync(request.Accessory!, cancellationToken);
         return Ok(accessory);
     }
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateProduct(Guid id, [FromQuery] ProductType type, [FromBody] UpdateProductRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateProduct(Guid id, [FromQuery] ProductType type, [FromForm] UpdateProductRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
     {
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+            request.ImageUrl = url;
+        }
         var product = await _productService.UpdateProductAsync(id, type, request, cancellationToken);
         return Ok(product);
     }

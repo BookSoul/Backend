@@ -843,13 +843,33 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task<Dictionary<Guid, string>> GetBlindBoxBookTitlesAsync(IEnumerable<Order> orders, CancellationToken cancellationToken)
+    {
+        var blindBoxBookIds = orders
+            .SelectMany(o => o.OrderItems)
+            .Where(oi => oi.BlindBoxTier.HasValue && oi.BookId.HasValue)
+            .Select(oi => oi.BookId!.Value)
+            .Distinct()
+            .ToList();
+            
+        if (blindBoxBookIds.Count == 0) return new Dictionary<Guid, string>();
+            
+        return await _context.Books
+            .Where(b => blindBoxBookIds.Contains(b.Id))
+            .ToDictionaryAsync(b => b.Id, b => b.Title, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<OrderSummaryDto>> GetOrdersAsync(CancellationToken cancellationToken = default)
-        => await _context.Orders
+    {
+        var orders = await _context.Orders
             .AsNoTracking()
             .Include(o => o.OrderItems)
             .OrderByDescending(o => o.OrderDate)
-            .Select(o => MapOrder(o))
             .ToListAsync(cancellationToken);
+
+        var bookTitles = await GetBlindBoxBookTitlesAsync(orders, cancellationToken);
+        return orders.Select(o => MapOrder(o, bookTitles)).ToList();
+    }
 
     public async Task<OrderSummaryDto> UpdateOrderStatusAsync(Guid orderId, OrderStatus status, string? reason = null, CancellationToken cancellationToken = default)
     {
@@ -876,7 +896,9 @@ public class AdminService : IAdminService
 
         order.Status = status;
         await _context.SaveChangesAsync(cancellationToken);
-        return MapOrder(order);
+        
+        var bookTitles = await GetBlindBoxBookTitlesAsync(new[] { order }, cancellationToken);
+        return MapOrder(order, bookTitles);
     }
 
     public async Task<OrderSummaryDto> ApproveReturnAsync(Guid orderId, string? note, CancellationToken cancellationToken = default)
@@ -895,7 +917,9 @@ public class AdminService : IAdminService
         order.ReturnReviewNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         order.ReturnReviewedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
-        return MapOrder(order);
+        
+        var bookTitles = await GetBlindBoxBookTitlesAsync(new[] { order }, cancellationToken);
+        return MapOrder(order, bookTitles);
     }
 
     public async Task<OrderSummaryDto> RejectReturnAsync(Guid orderId, string? note, CancellationToken cancellationToken = default)
@@ -914,7 +938,9 @@ public class AdminService : IAdminService
         order.ReturnReviewNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         order.ReturnReviewedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
-        return MapOrder(order);
+        
+        var bookTitles = await GetBlindBoxBookTitlesAsync(new[] { order }, cancellationToken);
+        return MapOrder(order, bookTitles);
     }
 
     public async Task<IReadOnlyList<AdminBuybackDto>> GetBuybacksAsync(CancellationToken cancellationToken = default)
@@ -1267,7 +1293,17 @@ public class AdminService : IAdminService
         _ => method.ToString()
     };
 
-    private static OrderSummaryDto MapOrder(Order order) => new(
+    private static string GetAdminProductName(OrderItem oi, Dictionary<Guid, string>? blindBoxTitles)
+    {
+        var defaultName = oi.ProductName ?? oi.BlindBoxGenre ?? "Sản phẩm";
+        if (oi.BlindBoxTier.HasValue && oi.BookId.HasValue && blindBoxTitles != null && blindBoxTitles.TryGetValue(oi.BookId.Value, out var realTitle))
+        {
+            return $"{defaultName} (Thực tế: {realTitle})";
+        }
+        return defaultName;
+    }
+
+    private static OrderSummaryDto MapOrder(Order order, Dictionary<Guid, string>? blindBoxTitles = null) => new(
         order.Id,
         order.OrderDate,
         order.TotalAmount,
@@ -1276,13 +1312,13 @@ public class AdminService : IAdminService
         order.OrderItems.Select(oi => new OrderItemDto(
             oi.BookId ?? oi.AccessoryId,
             oi.BookId.HasValue ? ProductType.Book : oi.AccessoryId.HasValue ? ProductType.Accessory : null,
-            oi.ProductName ?? oi.BlindBoxGenre ?? "Sản phẩm",
+            GetAdminProductName(oi, blindBoxTitles),
             oi.Quantity,
             oi.Price,
             oi.BlindBoxTier.HasValue || string.Equals(oi.ProductTypeText, "blindbox", StringComparison.OrdinalIgnoreCase),
             (oi.BookId ?? oi.AccessoryId)?.ToString(),
             oi.ProductTypeText ?? (oi.BlindBoxTier.HasValue ? "blindbox" : oi.BookId.HasValue ? "book" : "accessory"),
-            oi.ProductName ?? oi.BlindBoxGenre ?? "Sản phẩm",
+            GetAdminProductName(oi, blindBoxTitles),
             oi.Price,
             oi.ProductImage,
             oi.Author,

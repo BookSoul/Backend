@@ -1,4 +1,4 @@
-﻿using Application.DTO;
+using Application.DTO;
 using Application.Features.Auth;
 using Application.Validation;
 using FluentAssertions;
@@ -19,7 +19,7 @@ public class AuthValidatorTests
                 Password = "123",
                 UserName = "tester",
                 Address = "HCM"
-            });
+            }, "http://localhost");
 
         var result = validator.Validate(command);
 

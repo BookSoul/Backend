@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Data;
 
-public class AppDbContext : IdentityDbContext<User, Role, Guid>
+public class AppDbContext : IdentityDbContext<User, Role, Guid>, Application.Interface.IAppDbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
