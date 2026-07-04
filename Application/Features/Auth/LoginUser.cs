@@ -29,6 +29,11 @@ public class LoginUserHandler : IRequestHandler<LoginUserQuery, AuthResponse>
             return new AuthResponse(false, "Invalid email or password");
         }
 
+        if (!await _userManager.IsEmailConfirmedAsync(user))
+        {
+            return new AuthResponse(false, "Vui lòng xác nhận email trước khi đăng nhập. Bạn hãy kiểm tra hộp thư của mình.");
+        }
+
         var roles = await _userManager.GetRolesAsync(user);
         var token = _jwtTokenGenerator.GenerateToken(user, roles);
         var role = roles.Contains("Admin")

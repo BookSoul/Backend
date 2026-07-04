@@ -18,13 +18,15 @@ public class UserController : ControllerBase
     private readonly ICheckoutService _checkoutService;
     private readonly IBuybackService _buybackService;
     private readonly UserManager<User> _userManager;
+    private readonly IImageStorageService _imageStorageService;
 
-    public UserController(ICartService cartService, ICheckoutService checkoutService, IBuybackService buybackService, UserManager<User> userManager)
+    public UserController(ICartService cartService, ICheckoutService checkoutService, IBuybackService buybackService, UserManager<User> userManager, IImageStorageService imageStorageService)
     {
         _cartService = cartService;
         _checkoutService = checkoutService;
         _buybackService = buybackService;
         _userManager = userManager;
+        _imageStorageService = imageStorageService;
     }
 
     [HttpGet("profile")]
@@ -38,8 +40,16 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("profile")]
-    public async Task<IActionResult> UpdateProfile([FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
     {
+        string? avatarUrl = request.Avatar;
+        if (avatarFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms, cancellationToken);
+            avatarUrl = await _imageStorageService.UploadAsync(avatarFile.FileName, avatarFile.ContentType, ms.ToArray(), cancellationToken);
+        }
+
         var fullName = string.IsNullOrWhiteSpace(request.FullName) ? request.Name : request.FullName;
         var userName = string.IsNullOrWhiteSpace(request.UserName) ? request.Name : request.UserName;
 
@@ -80,7 +90,7 @@ public class UserController : ControllerBase
         user.UserName = normalizedUserName;
         user.PhoneNumber = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         user.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
-        user.AvatarUrl = string.IsNullOrWhiteSpace(request.Avatar) ? null : request.Avatar.Trim();
+        user.AvatarUrl = string.IsNullOrWhiteSpace(avatarUrl) ? null : avatarUrl.Trim();
 
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)

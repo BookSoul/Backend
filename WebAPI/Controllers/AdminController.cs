@@ -12,10 +12,12 @@ namespace WebAPI.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
+    private readonly IImageStorageService _imageStorageService;
 
-    public AdminController(IAdminService adminService)
+    public AdminController(IAdminService adminService, IImageStorageService imageStorageService)
     {
         _adminService = adminService;
+        _imageStorageService = imageStorageService;
     }
 
     [Authorize(Roles = "Admin,Staff")]
@@ -81,13 +83,31 @@ public class AdminController : ControllerBase
 
     [Authorize(Roles = "Admin")]
     [HttpPost("staff")]
-    public async Task<IActionResult> CreateStaff([FromBody] CreateStaffRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.CreateStaffAsync(request, cancellationToken));
+    public async Task<IActionResult> CreateStaff([FromForm] CreateStaffRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
+    {
+        if (avatarFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(avatarFile.FileName, avatarFile.ContentType, ms.ToArray(), cancellationToken);
+            request = request with { Avatar = url };
+        }
+        return Ok(await _adminService.CreateStaffAsync(request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpPut("staff/{id:guid}")]
-    public async Task<IActionResult> UpdateStaff(Guid id, [FromBody] UpdateAdminUserRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.UpdateStaffAsync(id, request, cancellationToken));
+    public async Task<IActionResult> UpdateStaff(Guid id, [FromForm] UpdateAdminUserRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
+    {
+        if (avatarFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(avatarFile.FileName, avatarFile.ContentType, ms.ToArray(), cancellationToken);
+            request = request with { Avatar = url };
+        }
+        return Ok(await _adminService.UpdateStaffAsync(id, request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpPut("staff/{id:guid}/lock")]
@@ -112,15 +132,33 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetCustomers(CancellationToken cancellationToken)
         => Ok(await _adminService.GetCustomerUsersAsync(cancellationToken));
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Staff")]
     [HttpPost("customers")]
-    public async Task<IActionResult> CreateCustomer([FromBody] CreateCustomerRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.CreateCustomerAsync(request, cancellationToken));
+    public async Task<IActionResult> CreateCustomer([FromForm] CreateCustomerRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
+    {
+        if (avatarFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(avatarFile.FileName, avatarFile.ContentType, ms.ToArray(), cancellationToken);
+            request = request with { Avatar = url };
+        }
+        return Ok(await _adminService.CreateCustomerAsync(request, cancellationToken));
+    }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Staff")]
     [HttpPut("customers/{id:guid}")]
-    public async Task<IActionResult> UpdateCustomer(Guid id, [FromBody] UpdateAdminUserRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.UpdateCustomerAsync(id, request, cancellationToken));
+    public async Task<IActionResult> UpdateCustomer(Guid id, [FromForm] UpdateAdminUserRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
+    {
+        if (avatarFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await avatarFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(avatarFile.FileName, avatarFile.ContentType, ms.ToArray(), cancellationToken);
+            request = request with { Avatar = url };
+        }
+        return Ok(await _adminService.UpdateCustomerAsync(id, request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpPut("customers/{id:guid}/lock")]
@@ -147,13 +185,31 @@ public class AdminController : ControllerBase
 
     [Authorize(Roles = "Admin,Staff")]
     [HttpPost("books")]
-    public async Task<IActionResult> CreateBook([FromBody] BookUpsertRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.CreateBookAsync(request, cancellationToken));
+    public async Task<IActionResult> CreateBook([FromForm] BookUpsertRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
+    {
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+            request.ImageUrl = url;
+        }
+        return Ok(await _adminService.CreateBookAsync(request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin,Staff")]
     [HttpPut("books/{id:guid}")]
-    public async Task<IActionResult> UpdateBook(Guid id, [FromBody] BookUpsertRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.UpdateBookAsync(id, request, cancellationToken));
+    public async Task<IActionResult> UpdateBook(Guid id, [FromForm] BookUpsertRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
+    {
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+            request.ImageUrl = url;
+        }
+        return Ok(await _adminService.UpdateBookAsync(id, request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpDelete("books/{id:guid}")]
@@ -170,13 +226,31 @@ public class AdminController : ControllerBase
 
     [Authorize(Roles = "Admin,Staff")]
     [HttpPost("accessories")]
-    public async Task<IActionResult> CreateAccessory([FromBody] AccessoryUpsertRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.CreateAccessoryAsync(request, cancellationToken));
+    public async Task<IActionResult> CreateAccessory([FromForm] AccessoryUpsertRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
+    {
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+            request.ImageUrl = url;
+        }
+        return Ok(await _adminService.CreateAccessoryAsync(request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin,Staff")]
     [HttpPut("accessories/{id:guid}")]
-    public async Task<IActionResult> UpdateAccessory(Guid id, [FromBody] AccessoryUpsertRequest request, CancellationToken cancellationToken)
-        => Ok(await _adminService.UpdateAccessoryAsync(id, request, cancellationToken));
+    public async Task<IActionResult> UpdateAccessory(Guid id, [FromForm] AccessoryUpsertRequest request, IFormFile? imageFile, CancellationToken cancellationToken)
+    {
+        if (imageFile != null)
+        {
+            await using var ms = new MemoryStream();
+            await imageFile.CopyToAsync(ms, cancellationToken);
+            var url = await _imageStorageService.UploadAsync(imageFile.FileName, imageFile.ContentType, ms.ToArray(), cancellationToken);
+            request.ImageUrl = url;
+        }
+        return Ok(await _adminService.UpdateAccessoryAsync(id, request, cancellationToken));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpDelete("accessories/{id:guid}")]
