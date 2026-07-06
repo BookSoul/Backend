@@ -47,9 +47,10 @@ public class CheckoutService : ICheckoutService
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
         try
         {
-            var subTotal = (useRequestedItems ? frontendItems.Sum(x => x.Price * x.Quantity) : cart.SubTotal)
-                + blindBoxLines.Sum(x => x.UnitPrice * x.Quantity)
-                + 0;
+            var subTotal = (useRequestedItems
+                    ? await CalculateRequestedSubtotalAsync(frontendItems, cancellationToken)
+                    : cart.SubTotal)
+                + blindBoxLines.Sum(x => ResolveBlindBoxLinePrice(x.UnitPrice) * Math.Max(x.Quantity, 1));
             Voucher? voucher = null;
             decimal discountAmount = 0;
             string? appliedCode = null;
@@ -147,7 +148,7 @@ public class CheckoutService : ICheckoutService
                     ProductName = "Blind Box",
                     ProductTypeText = "blindbox",
                     Category = pickedBook.Category?.Name,
-                    Price = blind.UnitPrice,
+                    Price = ResolveBlindBoxLinePrice(blind.UnitPrice),
                     Quantity = blind.Quantity
                 });
             }
@@ -263,6 +264,8 @@ public class CheckoutService : ICheckoutService
 
         if (type == "blindbox")
         {
+            var tier = ParseBlindBoxTier(item.Tier);
+            var blindBoxPrice = GetBlindBoxPrice(tier);
             var selectedBook = await PickRandomBlindBoxBookAsync(item.Category, cancellationToken);
             if (selectedBook is null)
             {
@@ -282,13 +285,13 @@ public class CheckoutService : ICheckoutService
                 OrderId = order.Id,
                 BookId = selectedBook.Id,
                 AccessoryId = null,
-                BlindBoxTier = ParseBlindBoxTier(item.Tier),
+                BlindBoxTier = tier,
                 BlindBoxGenre = item.Category ?? selectedBook.Category?.Name,
                 ProductName = name,
                 ProductImage = item.Image,
                 ProductTypeText = "blindbox",
                 Category = item.Category ?? selectedBook.Category?.Name,
-                Price = item.Price,
+                Price = blindBoxPrice,
                 Quantity = quantity
             });
             return;
@@ -392,6 +395,11 @@ public class CheckoutService : ICheckoutService
         }
 
         order.Status = status;
+        if (status == OrderStatus.Cancelled)
+        {
+            await RestoreOrderStockAsync(order, cancellationToken);
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
         return MapOrder(order);
     }
@@ -416,6 +424,7 @@ public class CheckoutService : ICheckoutService
         order.Status = OrderStatus.Cancelled;
         order.CancellationReason = request.Reason.Trim();
         order.CancelledAt = DateTime.UtcNow;
+        await RestoreOrderStockAsync(order, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return MapOrder(order);
     }
@@ -592,6 +601,80 @@ public class CheckoutService : ICheckoutService
         return normalized.Contains("vnpay") || normalized.Contains("vn pay");
     }
 
+    private async Task<decimal> CalculateRequestedSubtotalAsync(
+        IReadOnlyCollection<FrontendOrderItemDto> items,
+        CancellationToken cancellationToken)
+    {
+        decimal total = 0;
+
+        foreach (var item in items)
+        {
+            var quantity = item.Quantity <= 0 ? 1 : item.Quantity;
+            var type = (item.Type ?? "book").Trim().ToLowerInvariant();
+
+            if (type == "blindbox")
+            {
+                total += GetBlindBoxPrice(ParseBlindBoxTier(item.Tier)) * quantity;
+                continue;
+            }
+
+            if (Guid.TryParse(item.Id, out var productId))
+            {
+                if (type == "accessory")
+                {
+                    var accessoryPrice = await _context.Accessories
+                        .Where(accessory => accessory.Id == productId)
+                        .Select(accessory => (decimal?)accessory.Price)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (accessoryPrice.HasValue)
+                    {
+                        total += accessoryPrice.Value * quantity;
+                        continue;
+                    }
+                }
+
+                var bookPrice = await _context.Books
+                    .Where(book => book.Id == productId)
+                    .Select(book => (decimal?)book.Price)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (bookPrice.HasValue)
+                {
+                    total += bookPrice.Value * quantity;
+                    continue;
+                }
+            }
+
+            total += item.Price * quantity;
+        }
+
+        return total;
+    }
+
+    public async Task RestoreOrderStockAsync(Order order, CancellationToken cancellationToken = default)
+    {
+        foreach (var item in order.OrderItems)
+        {
+            if (item.BookId.HasValue)
+            {
+                var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
+                if (book is not null)
+                {
+                    book.Stock += item.Quantity;
+                }
+            }
+            else if (item.AccessoryId.HasValue)
+            {
+                var accessory = await _context.Accessories.FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
+                if (accessory is not null)
+                {
+                    accessory.Stock += item.Quantity;
+                }
+            }
+        }
+    }
+
     private static BlindBoxTier? ParseBlindBoxTier(string? tier)
     {
         if (string.IsNullOrWhiteSpace(tier)) return BlindBoxTier.Normal;
@@ -599,6 +682,20 @@ public class CheckoutService : ICheckoutService
         if (normalized.Contains("deluxe")) return BlindBoxTier.Deluxe;
         if (normalized.Contains("pro")) return BlindBoxTier.Pro;
         return BlindBoxTier.Normal;
+    }
+
+    private static decimal GetBlindBoxPrice(BlindBoxTier? tier) => tier switch
+    {
+        BlindBoxTier.Deluxe => 249000m,
+        BlindBoxTier.Pro => 149000m,
+        _ => 99000m
+    };
+
+    private static decimal ResolveBlindBoxLinePrice(decimal unitPrice)
+    {
+        if (unitPrice >= 249000m) return GetBlindBoxPrice(BlindBoxTier.Deluxe);
+        if (unitPrice >= 149000m) return GetBlindBoxPrice(BlindBoxTier.Pro);
+        return GetBlindBoxPrice(BlindBoxTier.Normal);
     }
 
     private static bool CanCustomerCancel(OrderStatus status) => (int)status is 0 or 1;

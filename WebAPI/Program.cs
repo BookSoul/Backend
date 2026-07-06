@@ -79,6 +79,7 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IShipperService, ShipperService>();
 builder.Services.AddScoped<IVnPayService, VnPayService>();
 builder.Services.AddScoped<MailKitEmailSender>();
+builder.Services.AddScoped<SmtpEmailSender>();
 builder.Services.AddScoped<IEmailSender>(services =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();

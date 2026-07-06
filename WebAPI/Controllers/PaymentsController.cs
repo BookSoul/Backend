@@ -104,8 +104,7 @@ public class PaymentsController : ControllerBase
 
         if (Math.Round(order.TotalAmount, 0, MidpointRounding.AwayFromZero) != Math.Round(result.Amount, 0, MidpointRounding.AwayFromZero))
         {
-            order.PaymentStatus = "failed";
-            order.PaymentResponseCode = result.ResponseCode;
+            await CancelFailedVnPayOrderAsync(order, "VNPay trả về sai số tiền thanh toán.", result, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
             return new VnPayReturnResponseDto(order.Id, false, "VNPay trả về sai số tiền thanh toán.", order.PaymentStatus, result.ResponseCode, result.TransactionNo);
         }
@@ -117,6 +116,18 @@ public class PaymentsController : ControllerBase
 
         if (result.IsSuccess)
         {
+            if (order.PaymentStatus == "paid")
+            {
+                return new VnPayReturnResponseDto(order.Id, true, "Thanh toÃ¡n VNPay thÃ nh cÃ´ng.", order.PaymentStatus, result.ResponseCode, result.TransactionNo);
+            }
+
+            if (order.Status == OrderStatus.Cancelled)
+            {
+                order.PaymentStatus = "failed";
+                await _context.SaveChangesAsync(cancellationToken);
+                return new VnPayReturnResponseDto(order.Id, false, "Đơn hàng đã bị hủy trước khi VNPay xác nhận thanh toán.", order.PaymentStatus, result.ResponseCode, result.TransactionNo);
+            }
+
             order.PaymentStatus = "paid";
             order.PaidAt ??= result.PayDate ?? DateTime.UtcNow;
             await RemovePaidItemsFromCartAsync(order, cancellationToken);
@@ -124,9 +135,51 @@ public class PaymentsController : ControllerBase
             return new VnPayReturnResponseDto(order.Id, true, "Thanh toán VNPay thành công.", order.PaymentStatus, result.ResponseCode, result.TransactionNo);
         }
 
-        order.PaymentStatus = "failed";
+        await CancelFailedVnPayOrderAsync(order, "Thanh toán VNPay không thành công hoặc đã bị hủy.", result, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return new VnPayReturnResponseDto(order.Id, false, "Thanh toán VNPay không thành công hoặc đã bị hủy.", order.PaymentStatus, result.ResponseCode, result.TransactionNo);
+    }
+
+    private async Task CancelFailedVnPayOrderAsync(
+        Domain.Entities.Orders.Order order,
+        string reason,
+        VnPayVerificationResultDto result,
+        CancellationToken cancellationToken)
+    {
+        if (order.PaymentStatus == "pending" && order.Status != OrderStatus.Cancelled)
+        {
+            await RestoreOrderStockAsync(order, cancellationToken);
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        order.CancellationReason ??= reason;
+        order.CancelledAt ??= DateTime.UtcNow;
+        order.PaymentStatus = "failed";
+        order.PaymentResponseCode = result.ResponseCode;
+        order.PaymentTransactionNo = result.TransactionNo;
+    }
+
+    private async Task RestoreOrderStockAsync(Domain.Entities.Orders.Order order, CancellationToken cancellationToken)
+    {
+        foreach (var item in order.OrderItems)
+        {
+            if (item.BookId.HasValue)
+            {
+                var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
+                if (book is not null)
+                {
+                    book.Stock += item.Quantity;
+                }
+            }
+            else if (item.AccessoryId.HasValue)
+            {
+                var accessory = await _context.Accessories.FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
+                if (accessory is not null)
+                {
+                    accessory.Stock += item.Quantity;
+                }
+            }
+        }
     }
 
     private async Task RemovePaidItemsFromCartAsync(Domain.Entities.Orders.Order order, CancellationToken cancellationToken)

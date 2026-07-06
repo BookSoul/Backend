@@ -29,6 +29,18 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("signup/verify-otp")]
+    public async Task<IActionResult> VerifySignupOtp([FromBody] VerifySignupOtpRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new VerifySignupOtpCommand(request), cancellationToken);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("confirm-email")]
     public async Task<IActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token, CancellationToken cancellationToken)
     {

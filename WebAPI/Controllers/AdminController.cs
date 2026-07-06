@@ -30,6 +30,16 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> Analytics([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken cancellationToken)
         => Ok(await _adminService.GetAnalyticsAsync(from, to, cancellationToken));
 
+    [Authorize(Roles = "Admin")]
+    [HttpGet("settings/shipping-fee")]
+    public async Task<IActionResult> GetShippingFee(CancellationToken cancellationToken)
+        => Ok(await _adminService.GetShippingFeeAsync(cancellationToken));
+
+    [Authorize(Roles = "Admin")]
+    [HttpPut("settings/shipping-fee")]
+    public async Task<IActionResult> UpdateShippingFee([FromBody] UpdateShippingFeeRequest request, CancellationToken cancellationToken)
+        => Ok(await _adminService.UpdateShippingFeeAsync(request.ShippingFee, cancellationToken));
+
     [Authorize(Roles = "Admin,Staff")]
     [HttpGet("book-categories")]
     public async Task<IActionResult> GetBookCategories(CancellationToken cancellationToken)
@@ -132,7 +142,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetCustomers(CancellationToken cancellationToken)
         => Ok(await _adminService.GetCustomerUsersAsync(cancellationToken));
 
-    [Authorize(Roles = "Admin,Staff")]
+    [Authorize(Roles = "Admin")]
     [HttpPost("customers")]
     public async Task<IActionResult> CreateCustomer([FromForm] CreateCustomerRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
     {
@@ -146,7 +156,7 @@ public class AdminController : ControllerBase
         return Ok(await _adminService.CreateCustomerAsync(request, cancellationToken));
     }
 
-    [Authorize(Roles = "Admin,Staff")]
+    [Authorize(Roles = "Admin")]
     [HttpPut("customers/{id:guid}")]
     public async Task<IActionResult> UpdateCustomer(Guid id, [FromForm] UpdateAdminUserRequest request, IFormFile? avatarFile, CancellationToken cancellationToken)
     {
@@ -323,4 +333,5 @@ public class AdminController : ControllerBase
     public record ApproveBuybackBody(decimal? ApprovedPrice, string? AdminNotes);
     public record RejectBuybackBody(string Reason);
     public record UpsertBookCatalogRequest(string Name, string? Description);
+    public record UpdateShippingFeeRequest(decimal ShippingFee);
 }

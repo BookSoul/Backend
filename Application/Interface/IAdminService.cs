@@ -26,6 +26,7 @@ public interface IAdminService
     Task DeleteBrandAsync(Guid id, CancellationToken cancellationToken = default);
     Task<AccessoryTypeDto> UpsertAccessoryTypeAsync(Guid? id, string name, string? description, CancellationToken cancellationToken = default);
 
+    Task<ShippingFeeDto> GetShippingFeeAsync(CancellationToken cancellationToken = default);
     Task<ShippingFeeDto> UpdateShippingFeeAsync(decimal shippingFee, CancellationToken cancellationToken = default);
     Task<VoucherDto> CreateVoucherAsync(string code, decimal discountAmount, DateTime expiryDate, decimal minOrderValue, CancellationToken cancellationToken = default);
     Task<AdminBannerDto> ManageBannerAsync(Guid? id, string title, string imageUrl, string? linkUrl, bool isActive, int displayOrder, CancellationToken cancellationToken = default);

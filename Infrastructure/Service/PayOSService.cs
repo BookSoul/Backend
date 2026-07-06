@@ -57,29 +57,29 @@ namespace Infrastructure.Service
                 // Map to new SDK Webhook type
                 var payOSWebhook = new Webhook
                 {
-                    Code = webhookBody.code,
-                    Description = webhookBody.desc,
+                    Code = webhookBody.code ?? string.Empty,
+                    Description = webhookBody.desc ?? string.Empty,
                     Success = webhookBody.success,
                     Data = new WebhookData
                     {
                         OrderCode = webhookBody.data.orderCode,
                         Amount = webhookBody.data.amount,
-                        Description = webhookBody.data.description!,
-                        AccountNumber = webhookBody.data.accountNumber!,
-                        Reference = webhookBody.data.reference!,
-                        TransactionDateTime = webhookBody.data.transactionDateTime!,
-                        Currency = webhookBody.data.currency!,
-                        PaymentLinkId = webhookBody.data.paymentLinkId!,
-                        Code = webhookBody.data.code!,
-                        Description2 = webhookBody.data.desc!,
-                        CounterAccountBankId = webhookBody.data.counterAccountBankId!,
-                        CounterAccountBankName = webhookBody.data.counterAccountBankName!,
-                        CounterAccountName = webhookBody.data.counterAccountName!,
-                        CounterAccountNumber = webhookBody.data.counterAccountNumber!,
-                        VirtualAccountName = webhookBody.data.virtualAccountName!,
-                        VirtualAccountNumber = webhookBody.data.virtualAccountNumber!
+                        Description = webhookBody.data.description ?? string.Empty,
+                        AccountNumber = webhookBody.data.accountNumber ?? string.Empty,
+                        Reference = webhookBody.data.reference ?? string.Empty,
+                        TransactionDateTime = webhookBody.data.transactionDateTime ?? string.Empty,
+                        Currency = webhookBody.data.currency ?? string.Empty,
+                        PaymentLinkId = webhookBody.data.paymentLinkId ?? string.Empty,
+                        Code = webhookBody.data.code ?? string.Empty,
+                        Description2 = webhookBody.data.desc ?? string.Empty,
+                        CounterAccountBankId = webhookBody.data.counterAccountBankId ?? string.Empty,
+                        CounterAccountBankName = webhookBody.data.counterAccountBankName ?? string.Empty,
+                        CounterAccountName = webhookBody.data.counterAccountName ?? string.Empty,
+                        CounterAccountNumber = webhookBody.data.counterAccountNumber ?? string.Empty,
+                        VirtualAccountName = webhookBody.data.virtualAccountName ?? string.Empty,
+                        VirtualAccountNumber = webhookBody.data.virtualAccountNumber ?? string.Empty
                     },
-                    Signature = webhookBody.signature
+                    Signature = webhookBody.signature ?? string.Empty
                 };
 
                 // This will verify the webhook using the checksumKey provided to PayOSOptions

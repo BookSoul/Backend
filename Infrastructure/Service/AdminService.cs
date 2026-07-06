@@ -106,11 +106,7 @@ public class AdminService : IAdminService
             throw new InvalidOperationException("Không thể xóa tài khoản Admin tại màn hình Staff.");
         }
 
-        var result = await _userManager.DeleteAsync(user);
-        if (!result.Succeeded)
-        {
-            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-        }
+        await SoftDeleteUserAsync(user, "staff", cancellationToken);
     }
 
     public async Task<UserAdminDto> UpdateStaffAsync(Guid userId, UpdateAdminUserRequest request, CancellationToken cancellationToken = default)
@@ -183,11 +179,7 @@ public class AdminService : IAdminService
             throw new InvalidOperationException("Cannot delete an admin or staff account from Customer management.");
         }
 
-        var result = await _userManager.DeleteAsync(user);
-        if (!result.Succeeded)
-        {
-            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-        }
+        await SoftDeleteUserAsync(user, "customer", cancellationToken);
     }
 
     public async Task<UserAdminDto> LockUserAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -392,8 +384,19 @@ public class AdminService : IAdminService
         return new AccessoryTypeDto(type.Id, type.Name, type.Description);
     }
 
+    public async Task<ShippingFeeDto> GetShippingFeeAsync(CancellationToken cancellationToken = default)
+    {
+        var setting = await _context.SystemSettings.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        return new ShippingFeeDto(setting?.ShippingFee ?? 0);
+    }
+
     public async Task<ShippingFeeDto> UpdateShippingFeeAsync(decimal shippingFee, CancellationToken cancellationToken = default)
     {
+        if (shippingFee < 0)
+        {
+            throw new InvalidOperationException("Shipping fee cannot be negative.");
+        }
+
         var setting = await _context.SystemSettings.FirstOrDefaultAsync(cancellationToken);
         if (setting is null)
         {
@@ -485,6 +488,50 @@ public class AdminService : IAdminService
     private async Task<bool> IsEmployeeAsync(User user)
     {
         return await _userManager.IsInRoleAsync(user, "Staff") || await _userManager.IsInRoleAsync(user, "Shipper");
+    }
+
+    private async Task SoftDeleteUserAsync(User user, string scope, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var stamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var deletedEmail = $"deleted-{scope}-{user.Id:N}-{stamp}@booksoul.local";
+        user.Email = deletedEmail;
+        user.NormalizedEmail = _userManager.NormalizeEmail(deletedEmail);
+        user.UserName = deletedEmail;
+        user.NormalizedUserName = _userManager.NormalizeName(deletedEmail);
+        user.FullName = scope.Equals("staff", StringComparison.OrdinalIgnoreCase)
+            ? "Tai khoan nhan vien da xoa"
+            : "Tai khoan khach hang da xoa";
+        user.PhoneNumber = null;
+        user.Address = null;
+        user.AvatarUrl = null;
+        user.EmailConfirmed = false;
+        user.PhoneNumberConfirmed = false;
+        user.LockoutEnabled = true;
+        user.LockoutEnd = DateTimeOffset.UtcNow.AddYears(100);
+        user.SecurityStamp = Guid.NewGuid().ToString("N");
+        user.ConcurrencyStamp = Guid.NewGuid().ToString("N");
+
+        var updateResult = await _userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", updateResult.Errors.Select(e => e.Description)));
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var removableRoles = roles
+            .Where(role => !role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (removableRoles.Length > 0)
+        {
+            var roleResult = await _userManager.RemoveFromRolesAsync(user, removableRoles);
+            if (!roleResult.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join(" ", roleResult.Errors.Select(e => e.Description)));
+            }
+        }
     }
 
     private static string NormalizeEmployeeRole(string? role)
@@ -877,6 +924,7 @@ public class AdminService : IAdminService
             .Include(o => o.OrderItems)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw new KeyNotFoundException("Order not found.");
+        var previousStatus = order.Status;
 
         if (!CanTransitionOrder(order.Status, status))
         {
@@ -892,6 +940,10 @@ public class AdminService : IAdminService
 
             order.CancellationReason = reason.Trim();
             order.CancelledAt = DateTime.UtcNow;
+            if (previousStatus != OrderStatus.Cancelled)
+            {
+                await RestoreOrderStockAsync(order, cancellationToken);
+            }
         }
 
         order.Status = status;
@@ -1283,6 +1335,29 @@ public class AdminService : IAdminService
             (OrderStatus.Shipping, OrderStatus.Delivered) => true,
             _ => false
         };
+    }
+
+    private async Task RestoreOrderStockAsync(Order order, CancellationToken cancellationToken)
+    {
+        foreach (var item in order.OrderItems)
+        {
+            if (item.BookId.HasValue)
+            {
+                var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == item.BookId.Value, cancellationToken);
+                if (book is not null)
+                {
+                    book.Stock += item.Quantity;
+                }
+            }
+            else if (item.AccessoryId.HasValue)
+            {
+                var accessory = await _context.Accessories.FirstOrDefaultAsync(a => a.Id == item.AccessoryId.Value, cancellationToken);
+                if (accessory is not null)
+                {
+                    accessory.Stock += item.Quantity;
+                }
+            }
+        }
     }
 
     private static string ToFrontendPaymentMethod(PaymentMethod method) => method switch

@@ -30,7 +30,9 @@ public record AuthResponse(
     string Message,
     string? Token = null,
     string? FullName = null,
-    UserProfileDto? User = null
+    UserProfileDto? User = null,
+    string? OtpCode = null,
+    DateTimeOffset? ExpiresAt = null
 );
 
 public record UserProfileDto(
@@ -76,4 +78,9 @@ public record ResetForgotPasswordRequest(
     string Email,
     string ResetCode,
     string NewPassword
+);
+
+public record VerifySignupOtpRequest(
+    string Email,
+    string OtpCode
 );
