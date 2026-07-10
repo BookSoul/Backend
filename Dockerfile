@@ -8,6 +8,7 @@ COPY ["WebAPI/WebAPI.csproj", "WebAPI/"]
 COPY ["Application/Application.csproj", "Application/"]
 COPY ["Domain/Domain.csproj", "Domain/"]
 COPY ["Infrastructure/Infrastructure.csproj", "Infrastructure/"]
+COPY ["ApplicationTest/ApplicationTest.csproj", "ApplicationTest/"]
 
 RUN dotnet restore "BOOKSOUL.sln"
 
