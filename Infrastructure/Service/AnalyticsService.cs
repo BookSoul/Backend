@@ -24,7 +24,7 @@ public class AnalyticsService : IAnalyticsService
             .Where(o => o.OrderDate >= start && o.OrderDate <= end);
 
         var totalRevenue = await ordersQuery
-            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned)
+            .Where(o => o.Status == OrderStatus.Delivered)
             .SumAsync(o => o.TotalAmount, cancellationToken);
 
         var totalOrders = await ordersQuery.CountAsync(cancellationToken);
@@ -34,7 +34,7 @@ public class AnalyticsService : IAnalyticsService
         var pendingBuyback = await _context.BuybackRequests.CountAsync(r => r.Status == BuybackRequestStatus.Pending, cancellationToken);
 
         var revenueByMonth = await ordersQuery
-            .Where(o => o.Status != OrderStatus.Cancelled && o.Status != OrderStatus.Returned)
+            .Where(o => o.Status == OrderStatus.Delivered)
             .GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month })
             .Select(g => new MonthlyRevenueDto(g.Key.Year, g.Key.Month, g.Sum(x => x.TotalAmount)))
             .OrderBy(x => x.Year)

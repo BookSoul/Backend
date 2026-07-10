@@ -12,11 +12,13 @@ public class BuybackService : IBuybackService
 {
     private readonly AppDbContext _context;
     private readonly IImageStorageService _imageStorageService;
+    private readonly INotificationService _notificationService;
 
-    public BuybackService(AppDbContext context, IImageStorageService imageStorageService)
+    public BuybackService(AppDbContext context, IImageStorageService imageStorageService, INotificationService notificationService)
     {
         _context = context;
         _imageStorageService = imageStorageService;
+        _notificationService = notificationService;
     }
 
     public async Task<BuybackRequestDto> CreateRequestAsync(
@@ -115,6 +117,16 @@ public class BuybackService : IBuybackService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (request.Status == BuybackRequestStatus.Approved)
+        {
+            try 
+            {
+                await _notificationService.BroadcastToRoleAsync("Shipper", "Có Task lấy hàng mới", $"Đơn thu cũ {requestId} vừa được duyệt", NotificationType.Task);
+            } 
+            catch { }
+        }
+
         return await MapAsync(requestId, cancellationToken);
     }
 

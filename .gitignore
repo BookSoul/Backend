@@ -45,7 +45,8 @@ pub/
 *.sln.docstates
 
 ## Thư mục chứa file upload tĩnh của ứng dụng web (nếu bạn muốn bỏ qua)
-# wwwroot/uploads/
+**/wwwroot/uploads/*
+!**/wwwroot/uploads/.gitkeep
 
 ## Hệ điều hành rác
 Thumbs.db

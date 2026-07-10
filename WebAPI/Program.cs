@@ -14,6 +14,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Behaviors;
 using WebAPI.Middleware;
+using WebAPI.Hubs;
+using WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +58,19 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/notifications"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
@@ -90,6 +105,8 @@ builder.Services.AddScoped<IEmailSender>(services =>
 });
 
 builder.Services.AddScoped<IPayOSService, PayOSService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSignalR();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -104,7 +121,9 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
                 "http://localhost:5173",
                 "http://localhost:4173",
-                "http://localhost:3000")
+                "http://localhost:3000",
+                "https://booksoul.io.vn",
+                "http://booksoul.io.vn")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials());
@@ -166,5 +185,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();

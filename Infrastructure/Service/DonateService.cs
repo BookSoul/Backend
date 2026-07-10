@@ -11,11 +11,13 @@ public class DonateService : IDonateService
 {
     private readonly AppDbContext _context;
     private readonly IImageStorageService _imageStorageService;
+    private readonly INotificationService _notificationService;
 
-    public DonateService(AppDbContext context, IImageStorageService imageStorageService)
+    public DonateService(AppDbContext context, IImageStorageService imageStorageService, INotificationService notificationService)
     {
         _context = context;
         _imageStorageService = imageStorageService;
+        _notificationService = notificationService;
     }
 
     public async Task<DonateRequestDto> CreateAsync(Guid customerId, CreateDonateRequest request, CancellationToken cancellationToken = default)
@@ -106,6 +108,16 @@ public class DonateService : IDonateService
         entity.ReviewedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (request.Status == DonateRequestStatus.Approved)
+        {
+            try
+            {
+                await _notificationService.BroadcastToRoleAsync("Shipper", "Có Task lấy hàng mới", $"Đơn quyên góp {requestId} vừa được duyệt", NotificationType.Task);
+            }
+            catch { }
+        }
+
         return Map(entity);
     }
 

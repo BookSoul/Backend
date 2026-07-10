@@ -715,7 +715,9 @@ public class AdminService : IAdminService
 
     public async Task<AdminDashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default)
     {
-        var totalRevenue = await _context.Orders.SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+        var totalRevenue = await _context.Orders
+            .Where(o => o.Status == OrderStatus.Delivered)
+            .SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
         var totalOrders = await _context.Orders.CountAsync(cancellationToken);
         var pendingOrders = await _context.Orders.CountAsync(o =>
             o.Status == OrderStatus.Pending ||

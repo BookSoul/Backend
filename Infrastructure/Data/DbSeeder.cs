@@ -77,6 +77,7 @@ public static class DbSeeder
             await context.SaveChangesAsync(cancellationToken);
         }
 
+        /*
         if (await context.Books.AnyAsync(cancellationToken)) return;
 
         var categoryMap = await context.Categories.ToDictionaryAsync(c => c.Name, c => c.Id, cancellationToken);
@@ -92,6 +93,7 @@ public static class DbSeeder
 
         context.Books.AddRange(books);
         await context.SaveChangesAsync(cancellationToken);
+        */
     }
 
     private static async Task SeedUserIfConfiguredAsync(

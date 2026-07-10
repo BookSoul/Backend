@@ -37,6 +37,7 @@ public class AppDbContext : IdentityDbContext<User, Role, Guid>, Application.Int
     public DbSet<Voucher> Vouchers => Set<Voucher>();
     public DbSet<Banner> Banners => Set<Banner>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<Domain.Entities.Notification> Notifications => Set<Domain.Entities.Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

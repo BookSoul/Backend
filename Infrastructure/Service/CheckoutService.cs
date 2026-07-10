@@ -17,13 +17,15 @@ public class CheckoutService : ICheckoutService
     private readonly ICartService _cartService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IVnPayService _vnPayService;
+    private readonly INotificationService _notificationService;
 
-    public CheckoutService(AppDbContext context, ICartService cartService, IUnitOfWork unitOfWork, IVnPayService vnPayService)
+    public CheckoutService(AppDbContext context, ICartService cartService, IUnitOfWork unitOfWork, IVnPayService vnPayService, INotificationService notificationService)
     {
         _context = context;
         _cartService = cartService;
         _unitOfWork = unitOfWork;
         _vnPayService = vnPayService;
+        _notificationService = notificationService;
     }
 
     public async Task<CheckoutResponseDto> CreateOrderAsync(Guid customerId, CreateOrderRequest request, string? clientIp = null, CancellationToken cancellationToken = default)
@@ -178,6 +180,13 @@ public class CheckoutService : ICheckoutService
             {
                 // Checkout already succeeded; cart cleanup can be retried by the client.
             }
+
+            try 
+            {
+                await _notificationService.BroadcastToRoleAsync("Admin", "Đơn hàng mới", $"Đơn hàng {order.Id} vừa được tạo", NotificationType.Order);
+                await _notificationService.BroadcastToRoleAsync("Staff", "Đơn hàng mới", $"Đơn hàng {order.Id} vừa được tạo", NotificationType.Order);
+            } 
+            catch { }
 
             return new CheckoutResponseDto(
                 order.Id,
