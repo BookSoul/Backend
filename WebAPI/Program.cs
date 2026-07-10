@@ -176,7 +176,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("Frontend");
 if (!app.Environment.IsDevelopment())
 {
-    app.UseHttpsRedirection();
+    // app.UseHttpsRedirection(); // Bỏ cái này vì Cloudflare đã xử lý HTTPS, nếu để sẽ bị lỗi CORS Preflight (redirect 307)
 }
 app.UseStaticFiles();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
