@@ -1,4 +1,4 @@
-﻿using Application.DTO;
+using Application.DTO;
 using Application.Interface;
 using Domain.Entities.Identity;
 using MediatR;
@@ -47,7 +47,7 @@ public class RegisterUserHandler :
         {
             if (await _userManager.IsEmailConfirmedAsync(existingUser))
             {
-                return new AuthResponse(false, "Email Ä‘Ã£ tá»“n táº¡i trong há»‡ thá»‘ng.");
+                return new AuthResponse(false, "Email đã tồn tại trong hệ thống.");
             }
 
             return await SendSignupOtpAsync(existingUser, cancellationToken);
@@ -86,18 +86,18 @@ public class RegisterUserHandler :
         var otpCode = command.Request.OtpCode?.Trim();
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otpCode))
         {
-            return new AuthResponse(false, "Vui lÃ²ng nháº­p email vÃ  mÃ£ OTP.");
+            return new AuthResponse(false, "Vui lòng nhập email và mã OTP.");
         }
 
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null)
         {
-            return new AuthResponse(false, "Email hoáº·c mÃ£ OTP chÆ°a Ä‘Ãºng.");
+            return new AuthResponse(false, "Email hoặc mã OTP chưa đúng.");
         }
 
         if (await _userManager.IsEmailConfirmedAsync(user))
         {
-            return await BuildLoggedInResponseAsync(user, "TÃ i khoáº£n Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c thá»±c.");
+            return await BuildLoggedInResponseAsync(user, "Tài khoản đã được xác thực.");
         }
 
         var storedCodeHash = await _userManager.GetAuthenticationTokenAsync(user, LoginProvider, SignupCodeTokenName);
@@ -110,7 +110,7 @@ public class RegisterUserHandler :
             expiresAt < DateTimeOffset.UtcNow)
         {
             await ClearSignupTokensAsync(user);
-            return new AuthResponse(false, "MÃ£ OTP Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng yÃªu cáº§u gá»­i mÃ£ má»›i.");
+            return new AuthResponse(false, "Mã OTP đã hết hạn. Vui lòng yêu cầu gửi mã mới.");
         }
 
         var incomingCodeHash = HashSignupCode(user.Id, otpCode);
@@ -120,17 +120,17 @@ public class RegisterUserHandler :
             if (attempts >= MaxSignupAttempts)
             {
                 await ClearSignupTokensAsync(user);
-                return new AuthResponse(false, "Báº¡n Ä‘Ã£ nháº­p sai mÃ£ quÃ¡ sá»‘ láº§n cho phÃ©p. Vui lÃ²ng yÃªu cáº§u mÃ£ OTP má»›i.");
+                return new AuthResponse(false, "Bạn đã nhập sai mã quá số lần cho phép. Vui lòng yêu cầu mã OTP mới.");
             }
 
             await _userManager.SetAuthenticationTokenAsync(user, LoginProvider, SignupAttemptsTokenName, attempts.ToString());
-            return new AuthResponse(false, $"MÃ£ OTP chÆ°a Ä‘Ãºng. Báº¡n cÃ²n {MaxSignupAttempts - attempts} láº§n thá»­.");
+            return new AuthResponse(false, $"Mã OTP chưa đúng. Bạn còn {MaxSignupAttempts - attempts} lần thử.");
         }
 
         user.EmailConfirmed = true;
         await _userManager.UpdateAsync(user);
         await ClearSignupTokensAsync(user);
-        return await BuildLoggedInResponseAsync(user, "XÃ¡c thá»±c email thÃ nh cÃ´ng.");
+        return await BuildLoggedInResponseAsync(user, "Xác thực email thành công.");
     }
 
     private async Task<string> GetAvailableUserNameAsync(string requestedUserName)
@@ -156,7 +156,7 @@ public class RegisterUserHandler :
             if (elapsed < ResendCooldown)
             {
                 var waitSeconds = Math.Ceiling((ResendCooldown - elapsed).TotalSeconds);
-                return new AuthResponse(false, $"Vui lÃ²ng Ä‘á»£i {waitSeconds:0} giÃ¢y trÆ°á»›c khi yÃªu cáº§u mÃ£ OTP má»›i.");
+                return new AuthResponse(false, $"Vui lòng đợi {waitSeconds:0} giây trước khi yêu cầu mã OTP mới.");
             }
         }
 
@@ -173,9 +173,9 @@ public class RegisterUserHandler :
         {
             await _emailSender.SendAsync(
                 user.Email ?? string.Empty,
-                "MÃ£ OTP xÃ¡c thá»±c tÃ i khoáº£n BookSoul",
+                "Mã OTP xác thực tài khoản BookSoul",
                 BuildSignupOtpEmail(user.FullName, otpCode, expiresAt),
-                $"MÃ£ OTP xÃ¡c thá»±c tÃ i khoáº£n BookSoul cá»§a báº¡n lÃ  {otpCode}. MÃ£ cÃ³ hiá»‡u lá»±c Ä‘áº¿n {expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}.",
+                $"Mã OTP xác thực tài khoản BookSoul của bạn là {otpCode}. Mã có hiệu lực đến {expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}.",
                 cancellationToken);
         }
         catch (InvalidOperationException ex)
@@ -187,7 +187,7 @@ public class RegisterUserHandler :
             }
 
 #if DEBUG
-            return new AuthResponse(true, $"Email provider chÆ°a sáºµn sÃ ng ({ex.Message}). MÃ£ OTP dev Ä‘Ã£ Ä‘Æ°á»£c táº¡o Ä‘á»ƒ báº¡n test local.", null, user.FullName, null, otpCode, expiresAt);
+            return new AuthResponse(true, $"Email provider chưa sẵn sàng ({ex.Message}). Mã OTP dev đã được tạo để bạn test local.", null, user.FullName, null, otpCode, expiresAt);
 #else
             await ClearSignupTokensAsync(user);
             return new AuthResponse(false, ex.Message);
@@ -196,10 +196,10 @@ public class RegisterUserHandler :
         catch
         {
             await ClearSignupTokensAsync(user);
-            return new AuthResponse(false, "KhÃ´ng gá»­i Ä‘Æ°á»£c mÃ£ OTP xÃ¡c thá»±c. Vui lÃ²ng kiá»ƒm tra cáº¥u hÃ¬nh email há»‡ thá»‘ng.");
+            return new AuthResponse(false, "Không gửi được mã OTP xác thực. Vui lòng kiểm tra cấu hình email hệ thống.");
         }
 
-        return new AuthResponse(true, "MÃ£ OTP Ä‘Ã£ Ä‘Æ°á»£c gá»­i Ä‘áº¿n email cá»§a báº¡n. Vui lÃ²ng nháº­p mÃ£ trong 15 phÃºt.", null, user.FullName, null, null, expiresAt);
+        return new AuthResponse(true, "Mã OTP đã được gửi đến email của bạn. Vui lòng nhập mã trong 15 phút.", null, user.FullName, null, null, expiresAt);
     }
 
     private async Task<AuthResponse> BuildLoggedInResponseAsync(User user, string message)
@@ -247,20 +247,20 @@ public class RegisterUserHandler :
 
     private static string BuildSignupOtpEmail(string fullName, string otpCode, DateTimeOffset expiresAt)
     {
-        var displayName = string.IsNullOrWhiteSpace(fullName) ? "báº¡n" : fullName.Trim();
+        var displayName = string.IsNullOrWhiteSpace(fullName) ? "bạn" : fullName.Trim();
         return $$"""
             <!doctype html>
             <html lang="vi">
             <body style="margin:0;padding:0;background:#f7f0df;font-family:Georgia,'Times New Roman',serif;color:#2d3727;">
               <div style="max-width:560px;margin:32px auto;padding:28px;background:#fffaf0;border:1px solid #d8c79b;border-radius:8px;">
                 <p style="margin:0 0 12px;font-size:14px;color:#6e795c;">BookSoul</p>
-                <h1 style="margin:0 0 18px;font-size:24px;color:#2d3727;">MÃ£ OTP xÃ¡c thá»±c tÃ i khoáº£n</h1>
-                <p style="font-size:15px;line-height:1.7;">Xin chÃ o {{WebUtility.HtmlEncode(displayName)}},</p>
-                <p style="font-size:15px;line-height:1.7;">Cáº£m Æ¡n báº¡n Ä‘Ã£ Ä‘Äƒng kÃ½ BookSoul. Nháº­p mÃ£ OTP dÆ°á»›i Ä‘Ã¢y Ä‘á»ƒ kÃ­ch hoáº¡t tÃ i khoáº£n:</p>
+                <h1 style="margin:0 0 18px;font-size:24px;color:#2d3727;">Mã OTP xác thực tài khoản</h1>
+                <p style="font-size:15px;line-height:1.7;">Xin chào {{WebUtility.HtmlEncode(displayName)}},</p>
+                <p style="font-size:15px;line-height:1.7;">Cảm ơn bạn đã đăng ký BookSoul. Nhập mã OTP dưới đây để kích hoạt tài khoản:</p>
                 <div style="margin:24px 0;padding:18px;text-align:center;background:#efe4c7;border:1px dashed #b3914b;border-radius:6px;">
                   <strong style="font-size:32px;letter-spacing:10px;color:#2d3727;">{{otpCode}}</strong>
                 </div>
-                <p style="font-size:14px;line-height:1.7;color:#6e795c;">MÃ£ cÃ³ hiá»‡u lá»±c Ä‘áº¿n {{expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}}.</p>
+                <p style="font-size:14px;line-height:1.7;color:#6e795c;">Mã có hiệu lực đến {{expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}}.</p>
                 <p style="margin-top:24px;font-size:14px;color:#6e795c;">BookSoul Team</p>
               </div>
             </body>
