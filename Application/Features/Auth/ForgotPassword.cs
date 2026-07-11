@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Application.DTO;
@@ -40,13 +40,13 @@ public class ForgotPasswordHandler :
         var email = command.Request.Email?.Trim();
         if (string.IsNullOrWhiteSpace(email))
         {
-            return new ForgotPasswordResponse(false, "Vui lÃ²ng nháº­p email.");
+            return new ForgotPasswordResponse(false, "Vui lòng nhập email.");
         }
 
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null)
         {
-            return new ForgotPasswordResponse(false, "Email nÃ y chÆ°a Ä‘Æ°á»£c Ä‘Äƒng kÃ½ trong há»‡ thá»‘ng.");
+            return new ForgotPasswordResponse(false, "Email này chưa được đăng ký trong hệ thống.");
         }
 
         var lastSentText = await _userManager.GetAuthenticationTokenAsync(user, LoginProvider, ResetLastSentTokenName);
@@ -56,7 +56,7 @@ public class ForgotPasswordHandler :
             if (elapsed < ResendCooldown)
             {
                 var waitSeconds = Math.Ceiling((ResendCooldown - elapsed).TotalSeconds);
-                return new ForgotPasswordResponse(false, $"Vui lÃ²ng Ä‘á»£i {waitSeconds:0} giÃ¢y trÆ°á»›c khi yÃªu cáº§u mÃ£ OTP má»›i.");
+                return new ForgotPasswordResponse(false, $"Vui lòng đợi {waitSeconds:0} giây trước khi yêu cầu mã OTP mới.");
             }
         }
 
@@ -72,9 +72,9 @@ public class ForgotPasswordHandler :
         {
             await _emailSender.SendAsync(
                 user.Email ?? email,
-                "MÃ£ OTP Ä‘áº·t láº¡i máº­t kháº©u BookSoul",
+                "Mã OTP đặt lại mật khẩu BookSoul",
                 BuildPasswordResetEmail(user.FullName, resetCode, expiresAt),
-                $"MÃ£ OTP Ä‘áº·t láº¡i máº­t kháº©u BookSoul cá»§a báº¡n lÃ  {resetCode}. MÃ£ cÃ³ hiá»‡u lá»±c Ä‘áº¿n {expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}.",
+                $"Mã OTP đặt lại mật khẩu BookSoul của bạn là {resetCode}. Mã có hiệu lực đến {expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}.",
                 cancellationToken);
         }
         catch (InvalidOperationException ex)
@@ -88,7 +88,7 @@ public class ForgotPasswordHandler :
 #if DEBUG
             return new ForgotPasswordResponse(
                 true,
-                $"Email provider chÆ°a sáºµn sÃ ng ({ex.Message}). MÃ£ OTP dev Ä‘Ã£ Ä‘Æ°á»£c táº¡o Ä‘á»ƒ báº¡n test local.",
+                $"Email provider chưa sẵn sàng ({ex.Message}). Mã OTP dev đã được tạo để bạn test local.",
                 user.Email,
                 resetCode,
                 expiresAt);
@@ -100,12 +100,12 @@ public class ForgotPasswordHandler :
         catch
         {
             await ClearResetTokensAsync(user);
-            return new ForgotPasswordResponse(false, "KhÃ´ng gá»­i Ä‘Æ°á»£c mÃ£ OTP qua email. Vui lÃ²ng kiá»ƒm tra cáº¥u hÃ¬nh email há»‡ thá»‘ng.");
+            return new ForgotPasswordResponse(false, "Không gửi được mã OTP qua email. Vui lòng kiểm tra cấu hình email hệ thống.");
         }
 
         return new ForgotPasswordResponse(
             true,
-            "MÃ£ OTP Ä‘Ã£ Ä‘Æ°á»£c gá»­i Ä‘áº¿n email cá»§a báº¡n. Vui lÃ²ng kiá»ƒm tra há»™p thÆ° vÃ  nháº­p mÃ£ trong 15 phÃºt.",
+            "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư và nhập mã trong 15 phút.",
             user.Email,
             null,
             expiresAt);
@@ -119,18 +119,18 @@ public class ForgotPasswordHandler :
 
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(resetCode))
         {
-            return new ForgotPasswordResponse(false, "Vui lÃ²ng nháº­p email vÃ  mÃ£ xÃ¡c nháº­n.");
+            return new ForgotPasswordResponse(false, "Vui lòng nhập email và mã xác nhận.");
         }
 
         if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
         {
-            return new ForgotPasswordResponse(false, "Máº­t kháº©u má»›i pháº£i cÃ³ Ã­t nháº¥t 6 kÃ½ tá»±.");
+            return new ForgotPasswordResponse(false, "Mật khẩu mới phải có ít nhất 6 ký tự.");
         }
 
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null)
         {
-            return new ForgotPasswordResponse(false, "Email hoáº·c mÃ£ xÃ¡c nháº­n chÆ°a Ä‘Ãºng.");
+            return new ForgotPasswordResponse(false, "Email hoặc mã xác nhận chưa đúng.");
         }
 
         var storedCodeHash = await _userManager.GetAuthenticationTokenAsync(user, LoginProvider, ResetCodeTokenName);
@@ -143,7 +143,7 @@ public class ForgotPasswordHandler :
             expiresAt < DateTimeOffset.UtcNow)
         {
             await ClearResetTokensAsync(user);
-            return new ForgotPasswordResponse(false, "MÃ£ xÃ¡c nháº­n Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng yÃªu cáº§u mÃ£ má»›i.");
+            return new ForgotPasswordResponse(false, "Mã xác nhận đã hết hạn. Vui lòng yêu cầu mã mới.");
         }
 
         var incomingCodeHash = HashResetCode(user.Id, resetCode);
@@ -153,12 +153,12 @@ public class ForgotPasswordHandler :
             if (attempts >= MaxResetAttempts)
             {
                 await ClearResetTokensAsync(user);
-                return new ForgotPasswordResponse(false, "Báº¡n Ä‘Ã£ nháº­p sai mÃ£ quÃ¡ sá»‘ láº§n cho phÃ©p. Vui lÃ²ng yÃªu cáº§u mÃ£ OTP má»›i.");
+                return new ForgotPasswordResponse(false, "Bạn đã nhập sai mã quá số lần cho phép. Vui lòng yêu cầu mã OTP mới.");
             }
 
             await _userManager.SetAuthenticationTokenAsync(user, LoginProvider, ResetAttemptsTokenName, attempts.ToString());
             var remainingAttempts = MaxResetAttempts - attempts;
-            return new ForgotPasswordResponse(false, $"MÃ£ xÃ¡c nháº­n chÆ°a Ä‘Ãºng. Báº¡n cÃ²n {remainingAttempts} láº§n thá»­.");
+            return new ForgotPasswordResponse(false, $"Mã xác nhận chưa đúng. Bạn còn {remainingAttempts} lần thử.");
         }
 
         var identityToken = await _userManager.GeneratePasswordResetTokenAsync(user);
@@ -169,7 +169,7 @@ public class ForgotPasswordHandler :
         }
 
         await ClearResetTokensAsync(user);
-        return new ForgotPasswordResponse(true, "Máº­t kháº©u Ä‘Ã£ Ä‘Æ°á»£c cáº­p nháº­t. Báº¡n cÃ³ thá»ƒ Ä‘Äƒng nháº­p láº¡i.", user.Email);
+        return new ForgotPasswordResponse(true, "Mật khẩu đã được cập nhật. Bạn có thể đăng nhập lại.", user.Email);
     }
 
     private async Task ClearResetTokensAsync(User user)
@@ -188,20 +188,20 @@ public class ForgotPasswordHandler :
 
     private static string BuildPasswordResetEmail(string fullName, string resetCode, DateTimeOffset expiresAt)
     {
-        var displayName = string.IsNullOrWhiteSpace(fullName) ? "báº¡n" : fullName.Trim();
+        var displayName = string.IsNullOrWhiteSpace(fullName) ? "bạn" : fullName.Trim();
         return $$"""
             <!doctype html>
             <html lang="vi">
             <body style="margin:0;padding:0;background:#f7f0df;font-family:Georgia,'Times New Roman',serif;color:#2d3727;">
               <div style="max-width:560px;margin:32px auto;padding:28px;background:#fffaf0;border:1px solid #d8c79b;border-radius:8px;">
                 <p style="margin:0 0 12px;font-size:14px;color:#6e795c;">BookSoul</p>
-                <h1 style="margin:0 0 18px;font-size:24px;color:#2d3727;">MÃ£ OTP Ä‘áº·t láº¡i máº­t kháº©u</h1>
-                <p style="font-size:15px;line-height:1.7;">Xin chÃ o {{WebUtility.HtmlEncode(displayName)}},</p>
-                <p style="font-size:15px;line-height:1.7;">Báº¡n vá»«a yÃªu cáº§u Ä‘áº·t láº¡i máº­t kháº©u cho tÃ i khoáº£n BookSoul. Nháº­p mÃ£ OTP dÆ°á»›i Ä‘Ã¢y Ä‘á»ƒ tiáº¿p tá»¥c:</p>
+                <h1 style="margin:0 0 18px;font-size:24px;color:#2d3727;">Mã OTP đặt lại mật khẩu</h1>
+                <p style="font-size:15px;line-height:1.7;">Xin chào {{WebUtility.HtmlEncode(displayName)}},</p>
+                <p style="font-size:15px;line-height:1.7;">Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản BookSoul. Nhập mã OTP dưới đây để tiếp tục:</p>
                 <div style="margin:24px 0;padding:18px;text-align:center;background:#efe4c7;border:1px dashed #b3914b;border-radius:6px;">
                   <strong style="font-size:32px;letter-spacing:10px;color:#2d3727;">{{resetCode}}</strong>
                 </div>
-                <p style="font-size:14px;line-height:1.7;color:#6e795c;">MÃ£ cÃ³ hiá»‡u lá»±c Ä‘áº¿n {{expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}}. Náº¿u báº¡n khÃ´ng yÃªu cáº§u thao tÃ¡c nÃ y, vui lÃ²ng bá» qua email.</p>
+                <p style="font-size:14px;line-height:1.7;color:#6e795c;">Mã có hiệu lực đến {{expiresAt.LocalDateTime:HH:mm dd/MM/yyyy}}. Nếu bạn không yêu cầu thao tác này, vui lòng bỏ qua email.</p>
                 <p style="margin-top:24px;font-size:14px;color:#6e795c;">BookSoul Team</p>
               </div>
             </body>
@@ -223,4 +223,3 @@ public class ForgotPasswordHandler :
             "Development",
             StringComparison.OrdinalIgnoreCase);
 }
-
