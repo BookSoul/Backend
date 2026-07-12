@@ -8,5 +8,6 @@ public interface IGuestService
     Task<ProductDetailDto> GetBookByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProductListItemDto>> GetAccessoriesAsync(string? keyword, Guid? brandId, Guid? typeId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BlindBoxTierDto>> GetBlindBoxTiersAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LiveSearchItemDto>> LiveSearchAsync(string keyword, CancellationToken cancellationToken = default);
 }

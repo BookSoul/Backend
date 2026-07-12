@@ -113,6 +113,12 @@ public class GuestService : IGuestService
             new BlindBoxTierDto((int)BlindBoxTier.Deluxe, "Deluxe", 249000m, "Gói cao cấp")
         });
 
+    public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+    {
+        var categories = await _context.Categories.AsNoTracking().OrderBy(c => c.Name).ToListAsync(cancellationToken);
+        return categories.Select(c => new CategoryDto(c.Id, c.Name, c.Description)).ToList();
+    }
+
     public async Task<IReadOnlyList<LiveSearchItemDto>> LiveSearchAsync(string keyword, CancellationToken cancellationToken = default)
     {
         keyword = keyword.Trim();

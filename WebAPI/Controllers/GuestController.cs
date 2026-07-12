@@ -32,6 +32,10 @@ public class GuestController : ControllerBase
     public async Task<IActionResult> GetBlindBoxTiers(CancellationToken cancellationToken)
         => Ok(await _guestService.GetBlindBoxTiersAsync(cancellationToken));
 
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetCategories(CancellationToken cancellationToken)
+        => Ok(await _guestService.GetCategoriesAsync(cancellationToken));
+
     [HttpGet("search/live")]
     public async Task<IActionResult> LiveSearch([FromQuery] string keyword, CancellationToken cancellationToken)
         => Ok(await _guestService.LiveSearchAsync(keyword, cancellationToken));
