@@ -192,7 +192,7 @@ public class ForgotPasswordHandler :
         return $$"""
             <!doctype html>
             <html lang="vi">
-            <body style="margin:0;padding:0;background:#f7f0df;font-family:Georgia,'Times New Roman',serif;color:#2d3727;">
+            <body style="margin:0;padding:0;background:#f7f0df;font-family:Arial,Helvetica,sans-serif;color:#2d3727;">
               <div style="max-width:560px;margin:32px auto;padding:28px;background:#fffaf0;border:1px solid #d8c79b;border-radius:8px;">
                 <p style="margin:0 0 12px;font-size:14px;color:#6e795c;">BookSoul</p>
                 <h1 style="margin:0 0 18px;font-size:24px;color:#2d3727;">Mã OTP đặt lại mật khẩu</h1>
