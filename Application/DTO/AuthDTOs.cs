@@ -47,15 +47,16 @@ public record UserProfileDto(
     string? UserName = null
 );
 
-public record UpdateUserProfileRequest(
-    string Name,
-    string Email,
-    string? Avatar,
-    string? Address,
-    string? Phone,
-    string? FullName = null,
-    string? UserName = null
-);
+public class UpdateUserProfileRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Avatar { get; set; }
+    public string? Address { get; set; }
+    public string? Phone { get; set; }
+    public string? FullName { get; set; }
+    public string? UserName { get; set; }
+}
 
 public record ChangePasswordRequest(
     string CurrentPassword,
