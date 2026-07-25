@@ -139,6 +139,7 @@ public class CheckoutService : ICheckoutService
                 }
 
                 pickedBook.Stock -= blind.Quantity;
+                _context.Books.Update(pickedBook);
                 order.OrderItems.Add(new OrderItem
                 {
                     Id = Guid.NewGuid(),
@@ -221,6 +222,7 @@ public class CheckoutService : ICheckoutService
             }
 
             book.Stock -= item.Quantity;
+            _context.Books.Update(book);
             order.OrderItems.Add(new OrderItem
             {
                 Id = Guid.NewGuid(),
@@ -248,6 +250,7 @@ public class CheckoutService : ICheckoutService
             }
 
             accessory.Stock -= item.Quantity;
+            _context.Accessories.Update(accessory);
             order.OrderItems.Add(new OrderItem
             {
                 Id = Guid.NewGuid(),
@@ -287,6 +290,7 @@ public class CheckoutService : ICheckoutService
             }
 
             selectedBook.Stock -= quantity;
+            _context.Books.Update(selectedBook);
 
             order.OrderItems.Add(new OrderItem
             {
@@ -315,6 +319,7 @@ public class CheckoutService : ICheckoutService
                 {
                     if (accessory.Stock < quantity) throw new InvalidOperationException($"Not enough stock for '{accessory.Name}'.");
                     accessory.Stock -= quantity;
+                    _context.Accessories.Update(accessory);
                     order.OrderItems.Add(new OrderItem
                     {
                         Id = Guid.NewGuid(),
@@ -337,6 +342,7 @@ public class CheckoutService : ICheckoutService
             {
                 if (book.Stock < quantity) throw new InvalidOperationException($"Not enough stock for '{book.Title}'.");
                 book.Stock -= quantity;
+                _context.Books.Update(book);
                 order.OrderItems.Add(new OrderItem
                 {
                     Id = Guid.NewGuid(),
@@ -671,6 +677,7 @@ public class CheckoutService : ICheckoutService
                 if (book is not null)
                 {
                     book.Stock += item.Quantity;
+                    _context.Books.Update(book);
                 }
             }
             else if (item.AccessoryId.HasValue)
@@ -679,6 +686,7 @@ public class CheckoutService : ICheckoutService
                 if (accessory is not null)
                 {
                     accessory.Stock += item.Quantity;
+                    _context.Accessories.Update(accessory);
                 }
             }
         }
