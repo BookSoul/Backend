@@ -13,11 +13,13 @@ public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
     private readonly IImageStorageService _imageStorageService;
+    private readonly IReviewService _reviewService;
 
-    public AdminController(IAdminService adminService, IImageStorageService imageStorageService)
+    public AdminController(IAdminService adminService, IImageStorageService imageStorageService, IReviewService reviewService)
     {
         _adminService = adminService;
         _imageStorageService = imageStorageService;
+        _reviewService = reviewService;
     }
 
     [Authorize(Roles = "Admin,Staff")]
@@ -334,4 +336,50 @@ public class AdminController : ControllerBase
     public record RejectBuybackBody(string Reason);
     public record UpsertBookCatalogRequest(string Name, string? Description);
     public record UpdateShippingFeeRequest(decimal ShippingFee);
+
+    // ── REVIEW MANAGEMENT ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Lấy danh sách tất cả review (có thể lọc theo bookId hoặc accessoryId). Yêu cầu Admin hoặc Staff.
+    /// </summary>
+    [Authorize(Roles = "Admin,Staff")]
+    [HttpGet("reviews/statistics")]
+    public async Task<IActionResult> GetReviewStatistics(CancellationToken cancellationToken)
+        => Ok(await _reviewService.GetAdminStatisticsAsync(cancellationToken));
+
+    [Authorize(Roles = "Admin,Staff")]
+    [HttpGet("reviews")]
+    public async Task<IActionResult> GetReviews([FromQuery] int? rating,
+        [FromQuery] Guid? bookId,
+        [FromQuery] Guid? accessoryId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await _reviewService.AdminGetAllAsync(bookId, accessoryId, rating, page, pageSize, cancellationToken));
+
+    /// <summary>
+    /// Xóa bất kỳ review nào không cần là owner (dành cho kiểm duyệt nội dung). Yêu cầu Admin hoặc Staff.
+    /// </summary>
+    [Authorize(Roles = "Admin,Staff")]
+    [HttpDelete("reviews/{reviewId:guid}")]
+    public async Task<IActionResult> DeleteReview(Guid reviewId, CancellationToken cancellationToken)
+    {
+        await _reviewService.AdminDeleteAsync(reviewId, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Ẩn / Hiện một review khỏi trang chi tiết sách.
+    /// </summary>
+    [Authorize(Roles = "Admin,Staff")]
+    [HttpPut("reviews/{reviewId:guid}/toggle-hide")]
+    public async Task<IActionResult> ToggleHideReview(Guid reviewId, CancellationToken cancellationToken)
+    {
+        var result = await _reviewService.AdminToggleHideAsync(reviewId, cancellationToken);
+        return Ok(result);
+    }
 }
+
+
+
+

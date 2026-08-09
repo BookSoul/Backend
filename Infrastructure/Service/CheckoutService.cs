@@ -602,7 +602,7 @@ public class CheckoutService : ICheckoutService
         var normalized = paymentMethod.Trim().ToLowerInvariant();
         if (normalized.Contains("vnpay") || normalized.Contains("vn pay"))
             return PaymentMethod.EWallet;
-        if (normalized.Contains("transfer") || normalized.Contains("khoản") || normalized.Contains("khoan") || normalized.Contains("bank"))
+        if (normalized.Contains("payos") || normalized.Contains("transfer") || normalized.Contains("khoản") || normalized.Contains("khoan") || normalized.Contains("bank"))
             return PaymentMethod.BankTransfer;
         if (normalized.Contains("wallet") || normalized.Contains("ví") || normalized.Contains("vi"))
             return PaymentMethod.EWallet;

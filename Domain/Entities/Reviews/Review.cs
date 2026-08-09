@@ -1,5 +1,6 @@
+using Domain.Entities.Accessories;
+using Domain.Entities.Books;
 using Domain.Entities.Identity;
-using Domain.Enums;
 
 namespace Domain.Entities.Reviews;
 
@@ -12,6 +13,10 @@ public class Review
     public int Rating { get; set; }
     public string? Comment { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public bool IsHidden { get; set; } = false;
 
     public User Customer { get; set; } = null!;
+    public Book? Book { get; set; }
+    public Accessory? Accessory { get; set; }
 }

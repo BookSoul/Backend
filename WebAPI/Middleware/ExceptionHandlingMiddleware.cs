@@ -16,10 +16,22 @@ public class ExceptionHandlingMiddleware
     {
         try
         {
+            // Bật buffering để có thể đọc response
+            context.Request.EnableBuffering();
+            
             await _next(context);
+            
+            if (context.Response.StatusCode == 400)
+            {
+                Console.WriteLine($"[400 Bad Request] Path: {context.Request.Path}");
+            }
         }
         catch (ValidationException ex)
         {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[400 Validation Error] {string.Join(", ", ex.Errors.Select(e => e.ErrorMessage))}");
+            Console.ResetColor();
+
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";
             var payload = new
@@ -43,6 +55,10 @@ public class ExceptionHandlingMiddleware
         }
         catch (InvalidOperationException ex)
         {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[400 Business Rule Error] {ex.Message}");
+            Console.ResetColor();
+
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
