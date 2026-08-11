@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -41,12 +41,38 @@ namespace Infrastructure.Migrations
                 table: "Reviews",
                 column: "BookId");
 
+            migrationBuilder.Sql(@"
+                WITH CTE AS (
+                    SELECT Id,
+                           ROW_NUMBER() OVER(
+                               PARTITION BY CustomerId, AccessoryId 
+                               ORDER BY CreatedAt DESC
+                           ) as row_num
+                    FROM Reviews
+                    WHERE AccessoryId IS NOT NULL
+                )
+                DELETE FROM Reviews WHERE Id IN (SELECT Id FROM CTE WHERE row_num > 1);
+            ");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Reviews_CustomerId_AccessoryId",
                 table: "Reviews",
                 columns: new[] { "CustomerId", "AccessoryId" },
                 unique: true,
                 filter: "[AccessoryId] IS NOT NULL");
+
+            migrationBuilder.Sql(@"
+                WITH CTE AS (
+                    SELECT Id,
+                           ROW_NUMBER() OVER(
+                               PARTITION BY CustomerId, BookId 
+                               ORDER BY CreatedAt DESC
+                           ) as row_num
+                    FROM Reviews
+                    WHERE BookId IS NOT NULL
+                )
+                DELETE FROM Reviews WHERE Id IN (SELECT Id FROM CTE WHERE row_num > 1);
+            ");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Reviews_CustomerId_BookId",
