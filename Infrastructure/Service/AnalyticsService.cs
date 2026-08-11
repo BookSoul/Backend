@@ -33,6 +33,10 @@ public class AnalyticsService : IAnalyticsService
             t => t.Status == ImportTicketStatus.Pending && t.SubmittedAt != null, cancellationToken);
         var pendingBuyback = await _context.BuybackRequests.CountAsync(r => r.Status == BuybackRequestStatus.Pending, cancellationToken);
 
+        var totalReviews = await _context.Reviews
+            .Where(r => r.CreatedAt >= start && r.CreatedAt <= end)
+            .CountAsync(cancellationToken);
+
         var revenueByMonth = await ordersQuery
             .Where(o => o.Status == OrderStatus.Delivered)
             .GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month })
@@ -47,6 +51,7 @@ public class AnalyticsService : IAnalyticsService
             pendingOrders,
             pendingImportTickets,
             pendingBuyback,
+            totalReviews,
             revenueByMonth);
     }
 }

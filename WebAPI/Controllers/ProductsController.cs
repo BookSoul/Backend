@@ -12,11 +12,13 @@ public class ProductsController : ControllerBase
 {
     private readonly IProductService _productService;
     private readonly IImageStorageService _imageStorageService;
+    private readonly IReviewService _reviewService;
 
-    public ProductsController(IProductService productService, IImageStorageService imageStorageService)
+    public ProductsController(IProductService productService, IImageStorageService imageStorageService, IReviewService reviewService)
     {
         _productService = productService;
         _imageStorageService = imageStorageService;
+        _reviewService = reviewService;
     }
 
     [HttpGet]
@@ -82,4 +84,40 @@ public class ProductsController : ControllerBase
     }
 
     public record CreateProductRequest(ProductType Type, CreateBookProductRequest? Book, CreateAccessoryProductRequest? Accessory);
+
+    // ── REVIEW ENDPOINTS ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lấy danh sách review của một sản phẩm. type=Book → theo BookId, type=Accessory → theo AccessoryId.
+    /// </summary>
+    [HttpGet("{id:guid}/reviews")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetProductReviews(
+        Guid id,
+        [FromQuery] ProductType type,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var result = type == ProductType.Book
+            ? await _reviewService.GetByBookIdAsync(id, page, pageSize, cancellationToken)
+            : await _reviewService.GetByAccessoryIdAsync(id, page, pageSize, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Lấy tóm tắt điểm đánh giá (average rating, total reviews, phân phối 1-5 sao) của một sản phẩm.
+    /// </summary>
+    [HttpGet("{id:guid}/reviews/summary")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetProductReviewSummary(
+        Guid id,
+        [FromQuery] ProductType type,
+        CancellationToken cancellationToken = default)
+    {
+        var summary = type == ProductType.Book
+            ? await _reviewService.GetRatingSummaryAsync(id, null, cancellationToken)
+            : await _reviewService.GetRatingSummaryAsync(null, id, cancellationToken);
+        return Ok(summary);
+    }
 }

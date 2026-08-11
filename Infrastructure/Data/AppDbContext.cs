@@ -58,6 +58,17 @@ public class AppDbContext : IdentityDbContext<User, Role, Guid>, Application.Int
         modelBuilder.Entity<BuybackRequest>().HasIndex(x => x.RequestCode).IsUnique();
         modelBuilder.Entity<DonateRequest>().Property(x => x.ImageUrls).HasMaxLength(4000);
         modelBuilder.Entity<BuybackRequest>().Property(x => x.ImageUrls).HasMaxLength(4000);
+
+        // Review: unique constraint (1 review per user per product) + comment length
+        modelBuilder.Entity<Review>().Property(r => r.Comment).HasMaxLength(2000);
+        modelBuilder.Entity<Review>()
+            .HasIndex(r => new { r.CustomerId, r.BookId })
+            .IsUnique()
+            .HasFilter("[BookId] IS NOT NULL");
+        modelBuilder.Entity<Review>()
+            .HasIndex(r => new { r.CustomerId, r.AccessoryId })
+            .IsUnique()
+            .HasFilter("[AccessoryId] IS NOT NULL");
         modelBuilder.Entity<SystemSetting>().Property(s => s.ShippingFee).HasPrecision(18, 2);
         modelBuilder.Entity<Voucher>().Property(v => v.DiscountAmount).HasPrecision(18, 2);
         modelBuilder.Entity<Voucher>().Property(v => v.MinOrderValue).HasPrecision(18, 2);

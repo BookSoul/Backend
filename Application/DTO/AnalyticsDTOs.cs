@@ -6,6 +6,7 @@ public record DashboardAnalyticsDto(
     int PendingOrders,
     int PendingImportTickets,
     int PendingBuybackRequests,
+    int TotalReviews,
     IReadOnlyList<MonthlyRevenueDto> RevenueByMonth
 );
 
