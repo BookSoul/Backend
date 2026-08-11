@@ -29,6 +29,30 @@ public class ReviewService : IReviewService
         if (request.BookId is null && request.AccessoryId is null)
             throw new InvalidOperationException("Phải cung cấp BookId hoặc AccessoryId.");
 
+        var productId = request.BookId ?? request.AccessoryId;
+        Guid? correctBookId = request.BookId;
+        Guid? correctAccessoryId = request.AccessoryId;
+
+        // Auto-correct mismatch between BookId and AccessoryId from frontend
+        if (productId.HasValue)
+        {
+            var isBook = await _context.Books.AnyAsync(b => b.Id == productId, cancellationToken);
+            if (isBook)
+            {
+                correctBookId = productId;
+                correctAccessoryId = null;
+            }
+            else
+            {
+                var isAccessory = await _context.Accessories.AnyAsync(a => a.Id == productId, cancellationToken);
+                if (isAccessory)
+                {
+                    correctAccessoryId = productId;
+                    correctBookId = null;
+                }
+            }
+        }
+
         // Validate comment
         if (string.IsNullOrWhiteSpace(request.Comment))
             throw new InvalidOperationException("Nội dung bình luận không được để trống.");
@@ -42,7 +66,7 @@ public class ReviewService : IReviewService
             .AnyAsync(o =>
                 o.CustomerId == customerId &&
                 o.Status == Domain.Enums.OrderStatus.Delivered &&
-                o.OrderItems.Any(i => (request.BookId != null && i.BookId == request.BookId) || (request.AccessoryId != null && i.AccessoryId == request.AccessoryId)),
+                o.OrderItems.Any(i => i.BookId == productId || i.AccessoryId == productId),
                 cancellationToken);
 
         if (!delivered)
@@ -51,7 +75,7 @@ public class ReviewService : IReviewService
         // Duplicate check: mỗi user chỉ review một sản phẩm một lần
         var isDuplicate = await _context.Reviews.AnyAsync(r =>
             r.CustomerId == customerId &&
-            (request.BookId != null ? r.BookId == request.BookId : r.AccessoryId == request.AccessoryId),
+            (r.BookId == productId || r.AccessoryId == productId),
             cancellationToken);
 
         if (isDuplicate)
@@ -61,8 +85,8 @@ public class ReviewService : IReviewService
         {
             Id = Guid.NewGuid(),
             CustomerId = customerId,
-            BookId = request.BookId,
-            AccessoryId = request.AccessoryId,
+            BookId = correctBookId,
+            AccessoryId = correctAccessoryId,
             Rating = request.Rating,
             Comment = request.Comment.Trim(),
             CreatedAt = DateTime.UtcNow
@@ -153,7 +177,8 @@ public class ReviewService : IReviewService
 
     public async Task<ReviewEligibilityDto> CheckEligibilityAsync(Guid customerId, Guid? bookId, Guid? accessoryId, CancellationToken cancellationToken = default)
     {
-        if (bookId is null && accessoryId is null)
+        var productId = bookId ?? accessoryId;
+        if (productId is null)
             throw new InvalidOperationException("Phải cung cấp BookId hoặc AccessoryId.");
 
         // Check if user has received the product
@@ -163,7 +188,7 @@ public class ReviewService : IReviewService
             .AnyAsync(o =>
                 o.CustomerId == customerId &&
                 o.Status == Domain.Enums.OrderStatus.Delivered &&
-                o.OrderItems.Any(i => (bookId != null && i.BookId == bookId) || (accessoryId != null && i.AccessoryId == accessoryId)),
+                o.OrderItems.Any(i => i.BookId == productId || i.AccessoryId == productId),
                 cancellationToken);
 
         if (!delivered)
@@ -177,7 +202,7 @@ public class ReviewService : IReviewService
             .Include(r => r.Accessory)
             .FirstOrDefaultAsync(r =>
                 r.CustomerId == customerId &&
-                (bookId != null ? r.BookId == bookId : r.AccessoryId == accessoryId),
+                (r.BookId == productId || r.AccessoryId == productId),
                 cancellationToken);
 
         return new ReviewEligibilityDto(true, existingReview != null ? MapToDto(existingReview) : null);
@@ -196,7 +221,7 @@ public class ReviewService : IReviewService
             .AsNoTracking()
             .Include(r => r.Customer)
             .Include(r => r.Book)
-            .Where(r => r.BookId == bookId && !r.IsHidden)
+            .Where(r => (r.BookId == bookId || r.AccessoryId == bookId) && !r.IsHidden)
             .OrderByDescending(r => r.CreatedAt);
 
         var totalItems = await query.CountAsync(cancellationToken);
@@ -223,7 +248,7 @@ public class ReviewService : IReviewService
             .AsNoTracking()
             .Include(r => r.Customer)
             .Include(r => r.Accessory)
-            .Where(r => r.AccessoryId == accessoryId && !r.IsHidden)
+            .Where(r => (r.AccessoryId == accessoryId || r.BookId == accessoryId) && !r.IsHidden)
             .OrderByDescending(r => r.CreatedAt);
 
         var totalItems = await query.CountAsync(cancellationToken);
@@ -249,10 +274,12 @@ public class ReviewService : IReviewService
     {
         if (bookId is null && accessoryId is null)
             throw new InvalidOperationException("Phải cung cấp BookId hoặc AccessoryId.");
+        
+        var productId = bookId ?? accessoryId;
 
         var ratings = await _context.Reviews
             .AsNoTracking()
-            .Where(r => !r.IsHidden && ((bookId != null && r.BookId == bookId) || (accessoryId != null && r.AccessoryId == accessoryId)))
+            .Where(r => !r.IsHidden && (r.BookId == productId || r.AccessoryId == productId))
             .Select(r => r.Rating)
             .ToListAsync(cancellationToken);
 
