@@ -227,7 +227,7 @@ public static class DbSeeder
 
         foreach (var r in reviewSeeds)
         {
-            if (await context.Reviews.AnyAsync(x => x.Id == r.Id, ct)) continue;
+            if (await context.Reviews.AnyAsync(x => x.Id == r.Id || (x.CustomerId == r.CustomerId && x.BookId == r.BookId), ct)) continue;
             context.Reviews.Add(new Review
             {
                 Id = r.Id,
